@@ -9,8 +9,12 @@
 #include "player.h"
 #include "scconsole.h"
 #include "unit_type.h"
+#include "runtime_diagnostics.h"
 #include <vector>
 #include "yms.h"
+
+// Every fopen call in this translation unit writes diagnostic output.
+#define fopen runtime_diagnostics::Open
 
 std::atomic<uintptr_t> draw_counter;
 bool all_visions;
@@ -349,107 +353,6 @@ namespace
         const bool held_context = !live_context && cache_valid &&
             ShouldHoldExpandedContextHelp();
 
-        // A short deterministic trace replaces video capture for tooltip
-        // diagnosis.  Record only state/signature transitions (plus a sparse
-        // heartbeat) so a cursor sweep can establish whether the native
-        // backing surface, its bounds, or only final presentation alternates.
-        static DWORD trace_mode_tick;
-        static bool trace_mode_initialized;
-        static bool trace_capture_enabled;
-        const DWORD current_tick = GetTickCount();
-        if (!trace_mode_initialized || current_tick - trace_mode_tick >= 1000)
-        {
-            trace_capture_enabled = GetFileAttributesA(
-                "fixed_zoom_tooltip_capture.enabled") !=
-                INVALID_FILE_ATTRIBUTES;
-            trace_mode_initialized = true;
-            trace_mode_tick = current_tick;
-        }
-        if (trace_capture_enabled)
-        {
-        const Surface *trace_surface = live_context ? live_surface :
-            (held_context ? &cached_surface : nullptr);
-        const Rect<int16_t> &trace_area = held_context ? cached_area :
-            context.area;
-        const size_t trace_size = trace_surface && trace_surface->image ?
-            static_cast<size_t>(trace_surface->w) * trace_surface->h : 0;
-        const uint32_t trace_hash = trace_size ?
-            fnv1a(trace_surface->image, trace_size) : 0;
-        const uint16_t trace_index = GetExpandedStatusTooltipControlIndex();
-        const DWORD trace_tick = current_tick;
-        static bool trace_initialized;
-        static unsigned trace_draw;
-        static unsigned trace_visible;
-        static unsigned trace_live;
-        static unsigned trace_held;
-        static unsigned trace_hold_requested;
-        static unsigned trace_cache_valid;
-        static uint16_t trace_control_index;
-        static uint16_t trace_w;
-        static uint16_t trace_h;
-        static Rect<int16_t> trace_last_area;
-        static uint32_t trace_last_hash;
-        static DWORD trace_last_tick;
-        const unsigned draw_state = context.draw != 0;
-        const unsigned visible_state = *bw::context_help_visible != 0;
-        const unsigned live_state = live_context;
-        const unsigned held_state = held_context;
-        const unsigned hold_requested = ShouldHoldExpandedContextHelp();
-        const unsigned cache_state = cache_valid;
-        const uint16_t trace_surface_w = trace_surface ?
-            static_cast<uint16_t>(trace_surface->w) : uint16_t{0};
-        const uint16_t trace_surface_h = trace_surface ?
-            static_cast<uint16_t>(trace_surface->h) : uint16_t{0};
-        const bool trace_changed = !trace_initialized ||
-            trace_draw != draw_state || trace_visible != visible_state ||
-            trace_live != live_state || trace_held != held_state ||
-            trace_hold_requested != hold_requested ||
-            trace_cache_valid != cache_state ||
-            trace_control_index != trace_index ||
-            trace_w != trace_surface_w || trace_h != trace_surface_h ||
-            trace_last_area.left != trace_area.left ||
-            trace_last_area.top != trace_area.top ||
-            trace_last_area.right != trace_area.right ||
-            trace_last_area.bottom != trace_area.bottom ||
-            trace_last_hash != trace_hash;
-        if (trace_changed || trace_tick - trace_last_tick >= 250)
-        {
-            FILE *log = fopen("fixed_zoom_tooltip_frames.log", "a");
-            if (log)
-            {
-                fprintf(log,
-                    "%lu control=%u mouse=(%u,%u) draw=%u visible=%u "
-                    "live=%u held=%u hold=%u cache=%u "
-                    "area=(%d,%d,%d,%d) surface=%ux%u hash=%08X\n",
-                    static_cast<unsigned long>(trace_tick),
-                    static_cast<unsigned>(trace_index),
-                    static_cast<unsigned>(*bw::mouse_clickpos_x),
-                    static_cast<unsigned>(*bw::mouse_clickpos_y),
-                    draw_state, visible_state, live_state, held_state,
-                    hold_requested, cache_state,
-                    static_cast<int>(trace_area.left),
-                    static_cast<int>(trace_area.top),
-                    static_cast<int>(trace_area.right),
-                    static_cast<int>(trace_area.bottom),
-                    static_cast<unsigned>(trace_surface_w),
-                    static_cast<unsigned>(trace_surface_h), trace_hash);
-                fclose(log);
-            }
-            trace_initialized = true;
-            trace_draw = draw_state;
-            trace_visible = visible_state;
-            trace_live = live_state;
-            trace_held = held_state;
-            trace_hold_requested = hold_requested;
-            trace_cache_valid = cache_state;
-            trace_control_index = trace_index;
-            trace_w = trace_surface_w;
-            trace_h = trace_surface_h;
-            trace_last_area = trace_area;
-            trace_last_hash = trace_hash;
-            trace_last_tick = trace_tick;
-        }
-        }
         if (!live_context && !held_context)
         {
             if (!ShouldHoldExpandedContextHelp())
@@ -1242,18 +1145,6 @@ void AfterStockDrawScreen()
             resolution::native_width - resolution::tile_width;
         const unsigned vertical_overlap =
             resolution::native_safe_game_height - resolution::tile_height;
-        static bool dump_private_passes = true;
-        static bool dump_placement_passes = true;
-        const bool placement_capture = dump_placement_passes &&
-            *bw::is_placing_building != 0;
-        const bool dump_this_frame = dump_private_passes || placement_capture;
-        const char *dump_prefix = placement_capture ?
-            "fixed_zoom_placement_pass" : "fixed_zoom_private_pass";
-        const char *info_name = placement_capture ?
-            "fixed_zoom_placement_passes.txt" :
-            "fixed_zoom_private_passes.txt";
-        FILE *pass_info = dump_this_frame ? fopen(info_name, "w") : nullptr;
-
         for (unsigned row = 0; row < resolution::tile_rows; ++row)
         {
             const unsigned copy_height = TileCopyHeight(row);
@@ -1288,92 +1179,12 @@ void AfterStockDrawScreen()
                     native_game_reference : native_tile;
                 RunStockGameOnlyPass(actual_x, actual_y,
                                      camera_x, camera_y, target);
-                if (dump_this_frame)
-                {
-                    char filename[64];
-                    const unsigned pass =
-                        row * resolution::tile_columns + column;
-                    sprintf_s(filename, "%s_%u.raw", dump_prefix, pass);
-                    FILE *pixels = fopen(filename, "wb");
-                    if (pixels)
-                    {
-                        fwrite(target, 1, native_frame_size, pixels);
-                        fclose(pixels);
-                    }
-                    if (pass_info)
-                    {
-                        const int32_t pass_delta_x =
-                            static_cast<int32_t>(camera_x) -
-                            static_cast<int32_t>(actual_x);
-                        const int32_t pass_delta_y =
-                            static_cast<int32_t>(camera_y) -
-                            static_cast<int32_t>(actual_y);
-                        const DrawLayer &layer3 = bw::draw_layers[3];
-                        const DrawLayer &layer4 = bw::draw_layers[4];
-                        const int16_t *placement_surfaces =
-                            reinterpret_cast<const int16_t *>(0x0064095C);
-                        fprintf(pass_info,
-                            "pass=%u desired=(%lu,%lu) render=(%lu,%lu) "
-                            "source=(%u,%u) mouse=(%ld,%ld) "
-                            "tile=(%u,%u) "
-                            "layer3=(%u;base=%d,%d;pass=%ld,%ld;size=%d,%d) "
-                            "layer4=(%u;base=%d,%d;pass=%ld,%ld;size=%d,%d) "
-                            "surfaces=(%d,%d;%d,%d) "
-                            "nonzero=%lu hash=%08X\n",
-                            pass, static_cast<unsigned long>(desired_x),
-                            static_cast<unsigned long>(desired_y),
-                            static_cast<unsigned long>(actual_x),
-                            static_cast<unsigned long>(actual_y),
-                            source_x, source_y,
-                            static_cast<long>(*bw::mouse_clickpos_x),
-                            static_cast<long>(*bw::mouse_clickpos_y),
-                            static_cast<unsigned>(
-                                *reinterpret_cast<uint16_t *>(0x00640890)),
-                            static_cast<unsigned>(
-                                *reinterpret_cast<uint16_t *>(0x00640892)),
-                            static_cast<unsigned>(layer3.draw),
-                            static_cast<int>(layer3.area.left),
-                            static_cast<int>(layer3.area.top),
-                            static_cast<long>(
-                                static_cast<int32_t>(layer3.area.left) +
-                                pass_delta_x),
-                            static_cast<long>(
-                                static_cast<int32_t>(layer3.area.top) +
-                                pass_delta_y),
-                            static_cast<int>(layer3.area.right),
-                            static_cast<int>(layer3.area.bottom),
-                            static_cast<unsigned>(layer4.draw),
-                            static_cast<int>(layer4.area.left),
-                            static_cast<int>(layer4.area.top),
-                            static_cast<long>(
-                                static_cast<int32_t>(layer4.area.left) +
-                                pass_delta_x),
-                            static_cast<long>(
-                                static_cast<int32_t>(layer4.area.top) +
-                                pass_delta_y),
-                            static_cast<int>(layer4.area.right),
-                            static_cast<int>(layer4.area.bottom),
-                            static_cast<int>(placement_surfaces[0]),
-                            static_cast<int>(placement_surfaces[1]),
-                            static_cast<int>(placement_surfaces[4]),
-                            static_cast<int>(placement_surfaces[5]),
-                            static_cast<unsigned long>(CountNonzero(
-                                target, native_frame_size)),
-                            fnv1a(target, native_frame_size));
-                    }
-                }
                 CopyTerrainTile(target, source_x, source_y,
                                 column * resolution::tile_width,
                                 row * resolution::tile_height,
                                 copy_width, copy_height);
             }
         }
-        if (pass_info)
-            fclose(pass_info);
-        if (placement_capture)
-            dump_placement_passes = false;
-        dump_private_passes = false;
-
         // StarCraft only partially refreshes its stock backing surface while
         // middle-mouse panning. Comparing that stale surface with the fully
         // redrawn first world tile can misclassify old map pixels as UI and

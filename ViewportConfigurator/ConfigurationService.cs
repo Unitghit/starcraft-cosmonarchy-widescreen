@@ -290,6 +290,7 @@ internal sealed class ConfigurationService
             ["windowed"] = windowed.ToString().ToLowerInvariant(),
             ["maintas"] = settings.PreserveAspectRatio.ToString().ToLowerInvariant(),
             ["boxing"] = "false",
+            ["maxfps"] = "333",
             ["adjmouse"] = "true",
             ["shader"] = nearest ? "Shaders\\nearest-neighbor.glsl" : "Bilinear",
             ["d3d9_filter"] = nearest ? "0" : "1",
@@ -298,6 +299,9 @@ internal sealed class ConfigurationService
             ["border"] = border.ToString().ToLowerInvariant(),
             ["resizable"] = border.ToString().ToLowerInvariant(),
             ["savesettings"] = "0",
+            ["maxgameticks"] = "-1",
+            ["nonexclusive"] = "false",
+            ["singlecpu"] = "false",
         };
         return IniDocument.UpdateSection(source, "ddraw", values);
     }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1, performance hotfix
+
+- Removed runtime diagnostic tracing from release builds.
+- Restored Cosmonarchy performance settings and unrestricted CPU affinity.
+
 ## 0.3.0, first release candidate
 
 - Added one universal runtime-resolution renderer supporting internal sizes

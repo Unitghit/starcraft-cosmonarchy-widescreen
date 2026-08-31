@@ -205,6 +205,7 @@
     <ClInclude Include="src\datastream.h" />
     <ClInclude Include="src\dialog.h" />
     <ClInclude Include="src\draw.h" />
+    <ClInclude Include="src\runtime_diagnostics.h" />
     <ClInclude Include="src\entity.h" />
     <ClInclude Include="src\flingy.h" />
     <ClInclude Include="src\game.h" />

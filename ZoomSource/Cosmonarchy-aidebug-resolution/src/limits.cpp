@@ -10,7 +10,11 @@
 #include "offsets_hooks.h"
 #include "offsets.h"
 #include "scconsole.h"
+#include "runtime_diagnostics.h"
 #include "yms.h"
+
+// Every fopen call in this translation unit writes diagnostic output.
+#define fopen runtime_diagnostics::Open
 
 namespace
 {

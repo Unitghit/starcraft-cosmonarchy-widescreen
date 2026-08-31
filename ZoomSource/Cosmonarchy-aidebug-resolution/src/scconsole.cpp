@@ -8,6 +8,7 @@
 #include "cm.h"
 #include "limits.h"
 #include "presentation.h"
+#include "runtime_diagnostics.h"
 #include "pathing.h"
 #include "player.h"
 #include "resolution.h"
@@ -25,6 +26,9 @@
 #include <cstdio>
 #include <cstring>
 #include <unordered_set>
+
+// Every fopen call in this translation unit writes diagnostic output.
+#define fopen runtime_diagnostics::Open
 
 using namespace Common;
 using std::get;
@@ -1982,6 +1986,8 @@ namespace {
                          int forwarded_x, int forwarded_y,
                          int engine_before_x, int engine_before_y,
                          bool translated_hud_event) {
+        if (!runtime_diagnostics::Enabled())
+            return;
         const int engine_x = static_cast<int>(*bw::mouse_clickpos_x);
         const int engine_y = static_cast<int>(*bw::mouse_clickpos_y);
         const DWORD now = GetTickCount();

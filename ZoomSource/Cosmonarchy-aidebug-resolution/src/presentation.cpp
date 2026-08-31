@@ -3,6 +3,11 @@
 #include <cstdio>
 #include <cstring>
 
+#include "runtime_diagnostics.h"
+
+// Every fopen call in this translation unit writes diagnostic output.
+#define fopen runtime_diagnostics::Open
+
 namespace presentation
 {
     namespace
