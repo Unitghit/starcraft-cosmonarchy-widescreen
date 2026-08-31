@@ -70,7 +70,9 @@ StarCraft has several independent coordinate gates:
 
 All semantic input gates are expanded. The native renderer-owned rectangle at
 `0x5993B0` remains native; gameplay-only call sites are redirected to an
-expanded copy.
+expanded copy. That copy is populated after the runtime profile is loaded,
+not during C++ static initialization, so custom and high-resolution profiles
+cannot inherit the universal build's default command bounds.
 
 `PrepareExpandedDragClip` preserves the current rectangle origin and replaces
 only its extent. `ClipCursorExpanded` widens a native game clip while a left

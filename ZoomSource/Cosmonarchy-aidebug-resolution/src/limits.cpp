@@ -208,7 +208,7 @@ namespace
     // Used only by gameplay hit tests.  Do not enlarge StarCraft's own
     // 0x005993B0 rectangle: the stock renderer also consumes that rectangle
     // and must remain 640x400 inside each compositor pass.
-    const Rect32 expanded_game_rect(
+    Rect32 expanded_game_rect(
         0, 0,
         static_cast<int32_t>(resolution::game_width),
         static_cast<int32_t>(resolution::screen_height));
@@ -773,6 +773,18 @@ namespace
 
     bool PatchInteractionBounds(Common::PatchContext *patch)
     {
+        // Runtime profiles are loaded after C++ static initialization. Keep
+        // the semantic gameplay rectangle synchronized with the selected
+        // internal resolution before any StarCraft or GPTP operand is pointed
+        // at it. Without this, a 1920x1080 profile still uses the build-time
+        // default bounds for right-click orders and cursor hover.
+        expanded_game_rect.left = 0;
+        expanded_game_rect.top = 0;
+        expanded_game_rect.right = static_cast<int32_t>(
+            resolution::game_width);
+        expanded_game_rect.bottom = static_cast<int32_t>(
+            resolution::screen_height);
+
         // StarCraft clamps WM_MOUSEMOVE and all three button handlers to
         // 640x480. It also chooses edge-scroll cursors at x=638/y=478.
         // Selection and building-placement code has additional semantic

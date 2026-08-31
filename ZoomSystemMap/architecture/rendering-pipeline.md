@@ -35,9 +35,11 @@ centered 640-pixel HUD. Tile height is derived from the output height while
 tile count remains derived from the logical battlefield, so this adds no
 private world passes. The HUD is then composed over the center of that strip.
 
-Layer 5 retains GPTP's installed wrapper. Calling raw StarCraft world draw
-`0x004BD580` removed Cosmonarchy's rally lines and other queued `ON_MAP`
-graphics from private passes.
+Private layer 5 calls StarCraft's raw world draw at `0x004BD580`, then invokes
+GPTP's `DrawExpandedMapGraphics` export against the same 640x480 pass buffer.
+This retains queued `ON_MAP` graphics such as rally lines while excluding
+GPTP `ON_SCREEN`, `ON_MOUSE`, and stat-res graphics. Those screen-space
+graphics otherwise repeat once per camera tile at high resolutions.
 
 ## Placement layers
 

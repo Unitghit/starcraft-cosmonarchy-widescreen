@@ -89,7 +89,8 @@ namespace
     typedef void (__cdecl *DrawExpandedMapGraphicsProc)(
         uint8_t *, uint16_t, uint16_t);
 
-    void DrawExpandedGptpMapGraphics(uint8_t *destination)
+    void DrawGptpMapGraphics(uint8_t *destination, uint16_t width,
+                             uint16_t height)
     {
         static DrawExpandedMapGraphicsProc proc;
         static bool logged;
@@ -115,11 +116,14 @@ namespace
             logged = true;
         }
         if (proc)
-        {
-            proc(destination,
-                 static_cast<uint16_t>(resolution::game_width),
-                 static_cast<uint16_t>(resolution::game_height));
-        }
+            proc(destination, width, height);
+    }
+
+    void DrawExpandedGptpMapGraphics(uint8_t *destination)
+    {
+        DrawGptpMapGraphics(destination,
+            static_cast<uint16_t>(resolution::game_width),
+            static_cast<uint16_t>(resolution::game_height));
     }
 
     struct PopupBounds
@@ -584,12 +588,14 @@ namespace
             bw::draw_layers[i].draw = world_layer ? saved_draw[i] : 0;
         }
         bw::draw_layers[5].draw = 1;
-        // Keep GPTP's installed layer-5 wrapper active in private passes.
-        // It calls the native world renderer and then draws queued ON_MAP
-        // graphics (rally/order lines and aura circles) for the pass camera.
-        // Replacing it with 0x004BD580 was the reason those overlays survived
-        // only in the outer native 4:3 frame.
+        // GPTP's layer-5 wrapper draws ON_SCREEN and stat-res graphics after
+        // the native world. Running it in every private camera pass stamps
+        // screen-space team indicators into every composed tile. Use the
+        // native world renderer here, then explicitly draw only GPTP ON_MAP
+        // graphics for this pass so rally lines and map effects remain intact.
         auto saved_game_draw = bw::draw_layers[5].Draw;
+        bw::draw_layers[5].Draw =
+            reinterpret_cast<decltype(bw::draw_layers[5].Draw)>(0x004BD580);
 
         // MoveScreen normally clamps y for a 400-pixel native viewport. Our
         // copied strips end above the HUD mask, so temporarily allow
@@ -645,6 +651,9 @@ namespace
         recursive_stock_draw = true;
         reinterpret_cast<void (__cdecl *)()>(0x0041E280)();
         recursive_stock_draw = false;
+        DrawGptpMapGraphics(native_inner_frame,
+            static_cast<uint16_t>(resolution::native_width),
+            static_cast<uint16_t>(resolution::native_height));
         for (unsigned box = 0; box < 2; ++box)
         {
             DrawLayer &layer = bw::draw_layers[3 + box];

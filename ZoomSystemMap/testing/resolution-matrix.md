@@ -15,7 +15,7 @@ The offline verifier currently exercises:
 | 1280x720 | 1280x640 | Offline pass | Fully user-tested working target |
 | 1366x768 | 1366x688 | Offline pass | Untested |
 | 1600x900 | 1600x820 | Offline + universal build pass | Untested |
-| 1920x1080 | 1920x1000 | Offline + universal build pass | User-tested before runtime unification |
+| 1920x1080 | 1920x1000 | Offline + universal build pass | User-tested after runtime unification; expanded orders and single-instance team indicator confirmed |
 | 2560x1440 | 2560x1360 | Offline + universal build pass | Untested |
 | 3840x2160 | 3840x2080 | Universal maximum-bound build pass | Untested stress target |
 
