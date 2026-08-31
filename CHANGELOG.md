@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2, compatibility hotfix
+
+- Fixed resolution-dependent horizontal rendering seams.
+- Improved cnc-ddraw compatibility by preserving custom and later-edited
+  `ddraw.ini` settings.
+- Confirmed that the configurator never modifies `ddraw.dll`.
+
 ## 0.4.1, rally-point hotfix
 
 - Restored accurate rally-point lines across the expanded battlefield.

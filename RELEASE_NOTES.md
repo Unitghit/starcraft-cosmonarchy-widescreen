@@ -1,7 +1,8 @@
-# StarCraft Cosmonarchy Widescreen 0.4.1
+# StarCraft Cosmonarchy Widescreen 0.4.2
 
-- Restored accurate rally-point lines across the expanded battlefield.
-- Fixed duplicate rally lines over the HUD during middle-mouse panning.
+- Fixed resolution-dependent horizontal rendering seams.
+- Improved cnc-ddraw compatibility. Custom `ddraw.ini` settings are preserved,
+  and `ddraw.dll` is never modified.
 
 Secondary-monitor targeting is not included in this release. Use the primary
 display.
