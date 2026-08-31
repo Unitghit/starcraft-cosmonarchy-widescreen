@@ -43,6 +43,12 @@ removed private-pass rally graphics. The filtered replay retains rally lines
 at each pass camera while excluding `ON_SCREEN`, `ON_MOUSE`, and stat-res
 graphics that would otherwise repeat once per camera tile.
 
+StarCraft's `MoveScreen` routine floors both camera axes to an eight-pixel
+boundary. Every private-pass source crop is derived from that effective camera
+position, not the unrounded request. This keeps adjacent tiles contiguous when
+the centered overlap itself is not divisible by eight and prevents repeated
+pixel bands at resolution-dependent tile boundaries.
+
 Middle-mouse panning uses a fresh matched world and UI comparison pair because
 the stock backing surface is only partially refreshed during that gesture. The
 comparison pair deliberately omits GPTP map graphics. Rally lines remain in the

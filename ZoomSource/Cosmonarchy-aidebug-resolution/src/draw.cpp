@@ -1025,6 +1025,12 @@ namespace
             static_cast<unsigned>(resolution::screen_height) - destination_y);
     }
 
+    uint32_t AlignCameraDown(uint32_t value)
+    {
+        return value / resolution::camera_quantum *
+            resolution::camera_quantum;
+    }
+
     void CopyTerrainTile(const uint8_t *source, unsigned source_x,
                          unsigned source_y, unsigned destination_x,
                          unsigned destination_y, unsigned copy_width,
@@ -1122,8 +1128,13 @@ namespace
                     base_x + column * resolution::tile_width;
                 const uint32_t desired_y =
                     base_y + row * resolution::tile_height;
-                const uint32_t actual_x = std::min(desired_x, native_max_x);
-                const uint32_t actual_y = std::min(desired_y, native_max_y);
+                // MoveScreen floors both axes to an eight-pixel boundary.
+                // Model that adjustment before deriving the source crop or
+                // adjacent passes can repeat a horizontal or vertical band.
+                const uint32_t actual_x = AlignCameraDown(
+                    std::min(desired_x, native_max_x));
+                const uint32_t actual_y = AlignCameraDown(
+                    std::min(desired_y, native_max_y));
                 const unsigned source_x = std::min(
                     static_cast<unsigned>(desired_x - actual_x),
                     static_cast<unsigned>(resolution::native_width -
@@ -1401,8 +1412,14 @@ void AfterStockDrawScreen()
                     desired_x - overlap_x : 0;
                 const uint32_t render_y = desired_y > overlap_y ?
                     desired_y - overlap_y : 0;
-                const uint32_t actual_x = std::min(render_x, native_max_x);
-                const uint32_t actual_y = std::min(render_y, native_max_y);
+                // MoveScreen floors both axes to an eight-pixel boundary.
+                // Use the effective camera position for the source crop so
+                // overlap offsets that are not multiples of eight remain
+                // pixel-contiguous at every tile boundary.
+                const uint32_t actual_x = AlignCameraDown(
+                    std::min(render_x, native_max_x));
+                const uint32_t actual_y = AlignCameraDown(
+                    std::min(render_y, native_max_y));
                 const unsigned source_x = std::min(
                     static_cast<unsigned>(desired_x - actual_x),
                     static_cast<unsigned>(resolution::native_width -

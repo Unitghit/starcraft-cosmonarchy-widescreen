@@ -42,6 +42,10 @@ def align_up(value: int, alignment: int) -> int:
     return (value + alignment - 1) // alignment * alignment
 
 
+def align_down(value: int, alignment: int) -> int:
+    return value // alignment * alignment
+
+
 def geometry(output_width: int, output_height: int) -> dict[str, int]:
     game_width = output_width
     game_height = output_height - (NATIVE_HEIGHT - NATIVE_GAME_HEIGHT)
@@ -75,8 +79,12 @@ def verify_camera(g: dict[str, int], map_width: int, map_height: int,
     safe_max_y = max(0, map_height - SAFE_GAME_HEIGHT)
     expanded_max_x = max(0, map_width - game_width)
     expanded_max_y = max(0, map_height - game_height)
-    base_x = min(max(0, base_x), expanded_max_x)
-    base_y = min(max(0, base_y), expanded_max_y)
+    base_x = align_down(
+        min(max(0, base_x), expanded_max_x), CAMERA_QUANTUM
+    )
+    base_y = align_down(
+        min(max(0, base_y), expanded_max_y), CAMERA_QUANTUM
+    )
 
     covered_area = 0
     covered_gutter_area = 0
@@ -99,11 +107,17 @@ def verify_camera(g: dict[str, int], map_width: int, map_height: int,
             overlap_y = vertical_overlap // 2 if row else 0
             render_x = max(0, desired_x - overlap_x)
             render_y = max(0, desired_y - overlap_y)
-            actual_x = min(render_x, native_max_x)
-            actual_y = min(render_y, safe_max_y)
+            # StarCraft's MoveScreen floors both axes to CAMERA_QUANTUM.
+            # Source crops must be derived from that effective position.
+            actual_x = align_down(min(render_x, native_max_x), CAMERA_QUANTUM)
+            actual_y = align_down(min(render_y, safe_max_y), CAMERA_QUANTUM)
             source_x = min(desired_x - actual_x, NATIVE_WIDTH - copy_width)
             source_y = min(desired_y - actual_y,
                            SAFE_GAME_HEIGHT - copy_height)
+            assert actual_x % CAMERA_QUANTUM == 0
+            assert actual_y % CAMERA_QUANTUM == 0
+            assert actual_x + source_x == desired_x
+            assert actual_y + source_y == desired_y
             assert source_x + copy_width <= NATIVE_WIDTH
             assert source_y + copy_height <= SAFE_GAME_HEIGHT
             assert destination_x + copy_width <= game_width

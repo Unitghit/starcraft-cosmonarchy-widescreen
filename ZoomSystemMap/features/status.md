@@ -8,6 +8,7 @@ Status here refers to the current 1280x720 build unless noted otherwise.
 | 2.5x presentation magnification | Confirmed | User confirmed full-client 3200x1800 at exact 5/2 scale; logical renderer remains 1280x720 with pitch 1280 |
 | Portable widescreen configurator | Implemented, integration-confirmed | Single-file WinForms app includes 4:3/16:9/custom selection through 4K, selectable centered or screen-edge top text, 1x presentation default, one embedded universal renderer, transactional Save/Restore, borderless generation, real normal-launch runtime config, and unchanged-GPTP checks |
 | 1280x640 expanded map | Confirmed | User test and six-pass captures |
+| Resolution-dependent tile seams | Confirmed | Camera-aligned source crops removed the duplicated horizontal band and also restored continuous rally lines |
 | Units and sprites across full width | Confirmed | User test after visible-row rebuild per pass |
 | Stable HUD bottom-centered | Confirmed | User test; popup no longer shifts it |
 | Modal popup centered | Confirmed | User test and logged popup bounds |
