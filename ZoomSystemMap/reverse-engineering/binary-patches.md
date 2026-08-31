@@ -217,20 +217,37 @@ then changes only the destination operand to `biased pointer + 46`. All other
 ID-indexed GPTP pointers retain their intentional bias. The stable GPTP file
 on disk remains unchanged.
 
-## Invisible native command-card tooltips
+## Invisible native HUD tooltips
 
-Two StarCraft callsites are redirected through an aidebug filter after their
-`E8` opcode and decoded target `0x00418340` are verified:
+Eight StarCraft shared control-lookup callsites are redirected through an
+aidebug filter after their `E8` opcode and decoded target `0x00418340` are
+verified:
 
 | Callsite | Native owner | Filter behavior |
 |---:|---|---|
+| `0x00457E10` | Status event validation | Return no control over obsolete native HUD |
+| `0x00457E50` | Status tooltip owner | Return no control over obsolete native HUD |
+| `0x00458015` | Status tooltip refresh | Return no control over obsolete native HUD |
 | `0x00459796` | Tooltip refresh | Return no control over obsolete native HUD |
+| `0x00459825` | Status parent validation | Return no control over obsolete native HUD |
 | `0x00459870` | Command-card mouse move | Return no control over obsolete native HUD |
 | `0x004A5459` | Minimap-button refresh | Return no control over obsolete native HUD |
 | `0x004A54BF` | Minimap-dialog mouse move | Return no control over obsolete native HUD |
 
+The dedicated Game Menu context caller at `0x004F5142` is separately verified
+to target `0x004F4F70`, which stable GPTP replaces with its own context
+function. The earlier Game Menu hover-owner lookups at `0x004F509A` and
+`0x004F511F` are verified to target `0x00418340`. The first owner path can
+tail-jump directly to `0x004F4F70` at `0x004F50C1`. Both owner lookups therefore
+filter their returned control using the exact presented button rectangle from
+the live dialog and parent bounds. The direct context filter preserves its
+dialog argument in `EDX` and otherwise chains to GPTP's live hook. The update
+callback assignments at `0x004F50DB` and `0x004F51B3` are both verified to
+target `0x004F4FB0`, then redirected through the same presented-rectangle hover
+policy. Patching both is required because the mouse-event path restores the
+second assignment after control creation.
 All other control lookups, including the bottom-centered HUD and modal dialogs,
-continue to tail-call the original function.
+continue to use their original functions.
 
 ## Prohibited blind patches
 

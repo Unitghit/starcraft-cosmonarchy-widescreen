@@ -8,6 +8,11 @@ presentation as separate controls, then applies settings through **Save** or
 **Save & Play**. The ordinary Cosmonarchy executable remains the normal launch
 path afterward.
 
+The top-screen objective and resource text layout is independently selectable.
+`centered_4_3` is the default and `screen_edges` is the optional wide layout.
+The selection is persisted as `viewport.top_ui_layout` and consumed by the
+same universal renderer payload.
+
 ## Ownership
 
 | Artifact | Configurator action |

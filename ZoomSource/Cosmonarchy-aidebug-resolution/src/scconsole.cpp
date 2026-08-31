@@ -1667,6 +1667,23 @@ namespace {
                 resolution::native_hud_top));
     }
 
+    // The Game Menu button is a transparent 71x19 control whose exact native
+    // bounds were verified from its live BinDlg. It must participate in input
+    // routing even where the STrans artwork mask is transparent.
+    bool NativeGameMenuControlContains(int native_x, int native_y) {
+        return native_x >= 416 && native_x <= 486 &&
+            native_y >= 388 && native_y <= 406;
+    }
+
+    bool PresentedGameMenuControlContains(int physical_x, int physical_y) {
+        const int native_x = physical_x -
+            static_cast<int>(resolution::hud_left);
+        const int native_y = physical_y -
+            static_cast<int>(resolution::hud_top -
+                resolution::native_hud_top);
+        return NativeGameMenuControlContains(native_x, native_y);
+    }
+
     bool ExpandedHudConsumesInput(int physical_x, int physical_y) {
         if (physical_x < static_cast<int>(resolution::hud_left) ||
             physical_x >= static_cast<int>(resolution::hud_left +
@@ -1680,7 +1697,8 @@ namespace {
         // bottom presentation row has no battlefield behind it; translate the
         // whole row so minimap pixels and unmasked control art cannot fall
         // through to the expanded gameplay handler.
-        return physical_y >= static_cast<int>(resolution::game_height) ||
+        return PresentedGameMenuControlContains(physical_x, physical_y) ||
+            physical_y >= static_cast<int>(resolution::game_height) ||
             NativeHudConsumesInput(physical_x, physical_y);
     }
 
@@ -1691,7 +1709,8 @@ namespace {
         return physical_x >= 0 && physical_y >= 0 &&
             physical_x < static_cast<int>(resolution::native_width) &&
             physical_y < static_cast<int>(resolution::native_height) &&
-            NativeMaskConsumesInput(physical_x, physical_y);
+            (NativeMaskConsumesInput(physical_x, physical_y) ||
+             NativeGameMenuControlContains(physical_x, physical_y));
     }
 
     typedef void (__fastcall *GameplayClickProc)(void *);
@@ -1977,7 +1996,7 @@ namespace {
             return 0; // Outside the physical client.
         if (ExpandedHudConsumesInput(x, y))
             return 3;
-        if (y < static_cast<int>(resolution::game_height))
+        if (y < static_cast<int>(resolution::screen_height))
             return x < static_cast<int>(resolution::native_width) ? 1 : 2;
         return 4;
     }
@@ -2090,6 +2109,121 @@ bool ShouldSuppressLegacyHudTooltip()
         previous = suppress;
     }
     return suppress;
+}
+
+bool ShouldSuppressLegacyGameMenuTooltip(void *dialog)
+{
+    if (!is_in_game() || !latest_physical_mouse_valid ||
+        *bw::popup_dialog_active != 0 || !dialog)
+        return false;
+
+    const uint8_t *control = static_cast<const uint8_t *>(dialog);
+    const uint8_t *parent = *reinterpret_cast<uint8_t *const *>(
+        control + 0x32);
+    if (!parent)
+        return false;
+
+    // draw_game_menu_context uses these same dialog and parent bounds. Convert
+    // the live native control rectangle to its bottom-centered presentation
+    // position, then allow context help only at that visible rectangle. The
+    // dedicated caller has already identified this control as Game Menu, so a
+    // physical point anywhere else belongs to its invisible native duplicate.
+    const int control_x = static_cast<int>(
+        *reinterpret_cast<const int16_t *>(control + 0x04));
+    const int control_y = static_cast<int>(
+        *reinterpret_cast<const int16_t *>(control + 0x06));
+    const int control_width = static_cast<int>(
+        *reinterpret_cast<const int16_t *>(control + 0x08));
+    const int control_height = static_cast<int>(
+        *reinterpret_cast<const int16_t *>(control + 0x0a));
+    const int native_left = control_x +
+        static_cast<int>(*reinterpret_cast<const int16_t *>(parent + 0x04));
+    const int native_top = control_y +
+        static_cast<int>(*reinterpret_cast<const int16_t *>(parent + 0x06));
+    const int native_right = native_left + std::max(0, control_width - 1);
+    const int native_bottom = native_top + std::max(0, control_height - 1);
+    const int presented_left = native_left +
+        static_cast<int>(resolution::hud_left);
+    const int presented_top = native_top +
+        static_cast<int>(resolution::hud_top - resolution::native_hud_top);
+    const int presented_right = native_right +
+        static_cast<int>(resolution::hud_left);
+    const int presented_bottom = native_bottom +
+        static_cast<int>(resolution::hud_top - resolution::native_hud_top);
+    const bool inside_presented =
+        latest_physical_mouse_x >= presented_left &&
+        latest_physical_mouse_x <= presented_right &&
+        latest_physical_mouse_y >= presented_top &&
+        latest_physical_mouse_y <= presented_bottom;
+    const bool suppress = !inside_presented;
+    void **hover_owner = reinterpret_cast<void **>(
+        const_cast<uint8_t *>(parent) + 0x3e);
+    const void *hover_before = *hover_owner;
+    if (suppress && hover_before == dialog)
+        *hover_owner = nullptr;
+    if (suppress)
+    {
+        uint32_t *flags = reinterpret_cast<uint32_t *>(
+            const_cast<uint8_t *>(control) + 0x18);
+        // DialogFlags::MouseHovering is the actual visual highlight owner.
+        // Mark the control dirty while clearing only that stale native state.
+        *flags = (*flags & ~0x00000080u) | 0x00000001u;
+    }
+
+    return suppress;
+}
+
+void SynchronizeGameMenuHoverState(void *dialog)
+{
+    if (!dialog || !is_in_game() || !latest_physical_mouse_valid ||
+        *bw::popup_dialog_active != 0)
+        return;
+
+    uint32_t *flags = reinterpret_cast<uint32_t *>(
+        static_cast<uint8_t *>(dialog) + 0x18);
+    const bool should_hover = PresentedGameMenuControlContains(
+        latest_physical_mouse_x, latest_physical_mouse_y);
+    const bool is_hovering = (*flags & 0x00000080u) != 0;
+    if (should_hover == is_hovering)
+        return;
+
+    // Synchronize the visual state immediately before Game Menu's dedicated
+    // update function draws the button. The generic dialog engine sees the
+    // native 4:3 control rectangle, while the compositor presents this control
+    // at the bottom-centered HUD rectangle.
+    if (should_hover)
+        *flags |= 0x00000080u;
+    else
+        *flags &= ~0x00000080u;
+    *flags |= 0x00000001u;
+}
+
+void *PrepareGameMenuControlLookup(void *event)
+{
+    if (!event)
+        return nullptr;
+    if (!is_in_game() || !latest_physical_mouse_valid ||
+        *bw::popup_dialog_active != 0 ||
+        !PresentedGameMenuControlContains(latest_physical_mouse_x,
+                                          latest_physical_mouse_y))
+        return event;
+
+    // Game Menu refreshes its hover owner after window-message dispatch, when
+    // its retained DialogEvent still contains expanded physical coordinates.
+    // Translate a private copy while preserving ECX and EDI for StarCraft's
+    // register-based control lookup.
+    static alignas(4) uint8_t translated_event[0x14];
+    memcpy(translated_event, event, sizeof(translated_event));
+    const int native_x = latest_physical_mouse_x -
+        static_cast<int>(resolution::hud_left);
+    const int native_y = latest_physical_mouse_y -
+        static_cast<int>(resolution::hud_top -
+            resolution::native_hud_top);
+    *reinterpret_cast<uint16_t *>(translated_event + 0x0e) =
+        static_cast<uint16_t>(native_x);
+    *reinterpret_cast<uint16_t *>(translated_event + 0x10) =
+        static_cast<uint16_t>(native_y);
+    return translated_event;
 }
 
 void *PrepareExpandedHudControlLookup(void *event)
@@ -2407,7 +2541,7 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
             *bw::popup_dialog_active == 0 &&
             !direct_expanded_hud_hit &&
             trace_raw_y >= 0 &&
-            trace_raw_y < static_cast<int>(resolution::game_height)) {
+            trace_raw_y < static_cast<int>(resolution::screen_height)) {
             PrepareExpandedDragClip();
         }
         if ((msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) &&
@@ -2506,7 +2640,6 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         static_cast<short>(LOWORD(lparam)) : 0;
     const int trace_forwarded_y = trace_mouse ?
         static_cast<short>(HIWORD(lparam)) : 0;
-
     // Cosmonarchy dispatches gameplay clicks through a second internal dialog
     // event. Correct that final stage after bypassing an invisible old HUD.
     const int expected_click_x = hidden_native_ui_hit ?

@@ -11,6 +11,10 @@ The program deliberately keeps two settings independent:
 - **External presentation** scales or fits the completed image without
   changing gameplay coordinates.
 
+The top-screen objective and resource text has its own independent layout
+selector. **Centered 4:3** is the default, while **Screen edges** anchors the
+two text regions to the far sides of the internal viewport.
+
 One universal runtime renderer supports internal dimensions from 640x480
 through 3840x2160. The selector includes 16:9 presets through 4K, experimental
 4:3 presets, and custom width/height fields. The 1280x720 profile remains the

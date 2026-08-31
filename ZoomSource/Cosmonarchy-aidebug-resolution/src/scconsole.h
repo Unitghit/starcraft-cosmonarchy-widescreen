@@ -142,6 +142,9 @@ class ScConsole : public Common::GenericConsole {
 
 void PatchConsole();
 bool ShouldSuppressLegacyHudTooltip();
+bool ShouldSuppressLegacyGameMenuTooltip(void *dialog);
+void SynchronizeGameMenuHoverState(void *dialog);
+void *PrepareGameMenuControlLookup(void *event);
 void *PrepareExpandedHudControlLookup(void *event);
 void *StabilizeExpandedSelectionTooltip(void *control, void *event);
 bool ShouldHoldExpandedContextHelp();

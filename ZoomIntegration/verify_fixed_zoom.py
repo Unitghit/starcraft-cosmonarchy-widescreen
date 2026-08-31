@@ -48,7 +48,9 @@ def geometry(output_width: int, output_height: int) -> dict[str, int]:
     columns = (game_width + MAX_PASS_WIDTH - 1) // MAX_PASS_WIDTH
     rows = (game_height + MAX_PASS_HEIGHT - 1) // MAX_PASS_HEIGHT
     tile_width = align_up((game_width + columns - 1) // columns, CAMERA_QUANTUM)
-    tile_height = align_up((game_height + rows - 1) // rows, CAMERA_QUANTUM)
+    tile_height = align_up(
+        (output_height + rows - 1) // rows, CAMERA_QUANTUM
+    )
     return {
         "output_width": output_width,
         "output_height": output_height,
@@ -77,9 +79,15 @@ def verify_camera(g: dict[str, int], map_width: int, map_height: int,
     base_y = min(max(0, base_y), expanded_max_y)
 
     covered_area = 0
+    covered_gutter_area = 0
+    hud_left = (g["output_width"] - NATIVE_WIDTH) // 2
+    hud_right = hud_left + NATIVE_WIDTH
     for row in range(g["rows"]):
         destination_y = row * tile_height
         copy_height = min(tile_height, game_height - destination_y)
+        visual_copy_height = min(
+            tile_height, g["output_height"] - destination_y
+        )
         for column in range(g["columns"]):
             destination_x = column * tile_width
             copy_width = min(tile_width, game_width - destination_x)
@@ -101,9 +109,43 @@ def verify_camera(g: dict[str, int], map_width: int, map_height: int,
             assert destination_x + copy_width <= game_width
             assert destination_y + copy_height <= game_height
             covered_area += copy_width * copy_height
+
+            gutter_top = max(game_height, destination_y)
+            gutter_bottom = min(
+                g["output_height"], destination_y + visual_copy_height
+            )
+            world_top = base_y + gutter_top
+            if gutter_top < gutter_bottom and world_top < map_height:
+                gutter_rows = min(
+                    gutter_bottom - gutter_top, map_height - world_top
+                )
+                source_gutter_y = source_y + gutter_top - destination_y
+                gutter_rows = min(
+                    gutter_rows, SAFE_GAME_HEIGHT - source_gutter_y
+                )
+                tile_right = destination_x + copy_width
+                left_width = max(
+                    0, min(tile_right, hud_left) - destination_x
+                )
+                right_width = max(
+                    0, tile_right - max(destination_x, hud_right)
+                )
+                assert source_gutter_y + gutter_rows <= SAFE_GAME_HEIGHT
+                covered_gutter_area += (left_width + right_width) * gutter_rows
     # Destinations are a regular non-overlapping row/column grid; exact area
     # therefore proves complete coverage without allocating a pixel set.
     assert covered_area == game_width * game_height
+    available_gutter_rows = max(
+        0,
+        min(
+            g["output_height"] - game_height,
+            map_height - (base_y + game_height),
+        ),
+    )
+    expected_gutter_area = (
+        available_gutter_rows * (g["output_width"] - NATIVE_WIDTH)
+    )
+    assert covered_gutter_area == expected_gutter_area
 
 
 def verify_resolution(width: int, height: int) -> None:
@@ -112,6 +154,7 @@ def verify_resolution(width: int, height: int) -> None:
     assert height >= NATIVE_HEIGHT
     assert g["tile_width"] <= NATIVE_WIDTH
     assert g["tile_height"] <= SAFE_GAME_HEIGHT
+    assert g["rows"] * g["tile_height"] >= height
     assert g["game_height"] + (NATIVE_HEIGHT - NATIVE_GAME_HEIGHT) == height
     hud_height = NATIVE_HEIGHT - NATIVE_HUD_TOP
     hud_left = (width - NATIVE_WIDTH) // 2
@@ -124,6 +167,19 @@ def verify_resolution(width: int, height: int) -> None:
     ui_top = (height - NATIVE_HEIGHT) // 2
     assert 0 <= ui_left + popup_left < ui_left + popup_right <= width
     assert 0 <= ui_top + popup_top < ui_top + popup_bottom <= height
+
+    # The same runtime payload supports both top-screen text policies. The
+    # centered layout keeps both strips in a centered native box. The wide
+    # layout anchors objectives left and resources right.
+    for use_screen_edges in (False, True):
+        top_ui_left = 0 if use_screen_edges else ui_left
+        top_ui_right_native_origin = (
+            width - NATIVE_WIDTH if use_screen_edges else ui_left
+        )
+        assert 0 <= top_ui_left
+        assert top_ui_left + NATIVE_WIDTH <= width
+        assert 0 <= top_ui_right_native_origin
+        assert top_ui_right_native_origin + NATIVE_WIDTH <= width
 
     # Front-end menus keep a native 4:3 source and use the largest centered
     # aspect-fit rectangle in the logical output. Verify both the presentation

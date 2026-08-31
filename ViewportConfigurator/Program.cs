@@ -38,10 +38,10 @@ internal static class Program
                 var display = new DisplayChoice(
                     Array.IndexOf(Screen.AllScreens, screen), screen);
                 service.Apply(new ViewportSettings(
-                    service.Profiles[0], PresentationMode.Scale, 2.5m,
-                    5, 2, 3200, 1800, WindowMode.Windowed,
+                    service.Profiles[0], PresentationMode.Scale, 1m,
+                    1, 1, 1280, 720, WindowMode.Windowed,
                     ScalingFilter.NearestNeighbor, true, display));
-                message = "Default 1280x720 internal / 3200x1800 external settings applied.";
+                message = "Default 1280x720 internal / 1280x720 external settings applied.";
             }
             else if (command.Equals("--apply-borderless",
                          StringComparison.OrdinalIgnoreCase))

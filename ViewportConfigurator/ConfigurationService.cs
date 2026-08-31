@@ -341,6 +341,7 @@ internal sealed class ConfigurationService
             renderer_profile={settings.Profile.Id}
             internal_width={settings.Profile.Width}
             internal_height={settings.Profile.Height}
+            top_ui_layout={(settings.TopTextLayout == TopTextLayout.ScreenEdges ? "screen_edges" : "centered_4_3")}
 
             [presentation]
             mode={mode}

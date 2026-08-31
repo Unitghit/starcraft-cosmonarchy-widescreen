@@ -262,7 +262,7 @@ namespace
                     static_cast<unsigned>(inside_native_game),
                     static_cast<unsigned>(mouse_x >= 0 && mouse_y >= 0 &&
                         mouse_x < static_cast<int>(resolution::game_width) &&
-                        mouse_y < static_cast<int>(resolution::game_height)),
+                        mouse_y < static_cast<int>(resolution::screen_height)),
                     static_cast<unsigned long>(*bw::popup_dialog_active),
                     static_cast<unsigned long>(*bw::is_placing_building),
                     static_cast<unsigned>(*bw::is_drag_selecting),
@@ -434,9 +434,9 @@ namespace
         right = std::max(0, std::min(right,
             static_cast<int>(resolution::game_width) - 1));
         top = std::max(0, std::min(top,
-            static_cast<int>(resolution::game_height) - 1));
+            static_cast<int>(resolution::screen_height) - 1));
         bottom = std::max(0, std::min(bottom,
-            static_cast<int>(resolution::game_height) - 1));
+            static_cast<int>(resolution::screen_height) - 1));
 
         const uint8_t color = *bw::selection_box_color;
         uint8_t *top_row = destination +
@@ -903,6 +903,13 @@ namespace
             static_cast<unsigned>(resolution::game_height) - destination_y);
     }
 
+    unsigned TileVisualCopyHeight(unsigned row)
+    {
+        const unsigned destination_y = row * resolution::tile_height;
+        return std::min(static_cast<unsigned>(resolution::tile_height),
+            static_cast<unsigned>(resolution::screen_height) - destination_y);
+    }
+
     void CopyTerrainTile(const uint8_t *source, unsigned source_x,
                          unsigned source_y, unsigned destination_x,
                          unsigned destination_y, unsigned copy_width,
@@ -920,6 +927,63 @@ namespace
         }
     }
 
+    void CopyTerrainTileGutters(const uint8_t *source, unsigned source_x,
+                                unsigned source_y, unsigned destination_x,
+                                unsigned destination_y, unsigned copy_width,
+                                unsigned visual_copy_height,
+                                uint32_t base_camera_y,
+                                uint32_t map_height)
+    {
+        if (resolution::hud_left == 0 || visual_copy_height == 0)
+            return;
+
+        const unsigned tile_bottom = std::min(
+            static_cast<unsigned>(resolution::screen_height),
+            destination_y + visual_copy_height);
+        const unsigned gutter_top = std::max(
+            static_cast<unsigned>(resolution::game_height), destination_y);
+        if (gutter_top >= tile_bottom)
+            return;
+
+        const uint64_t world_top =
+            static_cast<uint64_t>(base_camera_y) + gutter_top;
+        if (world_top >= map_height)
+            return;
+        const unsigned map_rows = static_cast<unsigned>(std::min<uint64_t>(
+            tile_bottom - gutter_top,
+            static_cast<uint64_t>(map_height) - world_top));
+        const unsigned source_gutter_y =
+            source_y + gutter_top - destination_y;
+        if (source_gutter_y >= resolution::native_safe_game_height)
+            return;
+        const unsigned copy_height = std::min(map_rows,
+            static_cast<unsigned>(resolution::native_safe_game_height) -
+                source_gutter_y);
+        if (copy_height == 0)
+            return;
+
+        const unsigned tile_right = destination_x + copy_width;
+        const unsigned left_gutter_right = std::min(tile_right,
+            static_cast<unsigned>(resolution::hud_left));
+        if (destination_x < left_gutter_right)
+        {
+            CopyTerrainTile(source, source_x, source_gutter_y,
+                destination_x, gutter_top,
+                left_gutter_right - destination_x, copy_height);
+        }
+
+        const unsigned right_gutter_left = std::max(destination_x,
+            static_cast<unsigned>(resolution::hud_left +
+                resolution::native_width));
+        if (right_gutter_left < tile_right)
+        {
+            CopyTerrainTile(source,
+                source_x + right_gutter_left - destination_x,
+                source_gutter_y, right_gutter_left, gutter_top,
+                tile_right - right_gutter_left, copy_height);
+        }
+    }
+
     void RenderExpandedTerrain(Surface *screen, uint32_t base_x,
                                uint32_t base_y, uint32_t map_width,
                                uint32_t map_height)
@@ -934,6 +998,7 @@ namespace
         for (unsigned row = 0; row < resolution::tile_rows; ++row)
         {
             const unsigned copy_height = TileCopyHeight(row);
+            const unsigned visual_copy_height = TileVisualCopyHeight(row);
             for (unsigned column = 0; column < resolution::tile_columns;
                  ++column)
             {
@@ -960,6 +1025,11 @@ namespace
                     column * resolution::tile_width,
                     row * resolution::tile_height,
                     copy_width, copy_height);
+                CopyTerrainTileGutters(
+                    target, source_x, source_y,
+                    column * resolution::tile_width,
+                    row * resolution::tile_height,
+                    copy_width, visual_copy_height, base_y, map_height);
             }
         }
     }
@@ -1148,6 +1218,7 @@ void AfterStockDrawScreen()
         for (unsigned row = 0; row < resolution::tile_rows; ++row)
         {
             const unsigned copy_height = TileCopyHeight(row);
+            const unsigned visual_copy_height = TileVisualCopyHeight(row);
             for (unsigned column = 0; column < resolution::tile_columns;
                  ++column)
             {
@@ -1183,6 +1254,11 @@ void AfterStockDrawScreen()
                                 column * resolution::tile_width,
                                 row * resolution::tile_height,
                                 copy_width, copy_height);
+                CopyTerrainTileGutters(
+                    target, source_x, source_y,
+                    column * resolution::tile_width,
+                    row * resolution::tile_height,
+                    copy_width, visual_copy_height, camera_y, map_height);
             }
         }
         // StarCraft only partially refreshes its stock backing surface while
@@ -1498,7 +1574,7 @@ int IsOutsideExpandedGameScreen(int x, int y)
     }
     return x < 0 || y < 0 ||
         x >= static_cast<int>(resolution::game_width) ||
-        y >= static_cast<int>(resolution::game_height);
+        y >= static_cast<int>(resolution::screen_height);
 }
 
 

@@ -2,9 +2,10 @@
 
 ## Symptom and success condition
 
-The logical renderer is correct at 1280x720. The active feature is a 2.5x
+The logical renderer is correct at 1280x720. This feature proved a 2.5x
 physical magnification without changing world coverage, HUD geometry, buffers,
-patch constants, or logical input coordinates.
+patch constants, or logical input coordinates. The configurator now defaults
+to 1x while retaining 2.5x as an available presentation choice.
 
 Success means the same 1280x720 image is presented at 3200x1800 with nearest-
 neighbor scaling and correct mouse mapping.

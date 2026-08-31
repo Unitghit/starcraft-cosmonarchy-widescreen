@@ -76,14 +76,20 @@ namespace
         ResolveViewportConfigurationPath(path, sizeof(path));
         unsigned width = static_cast<unsigned>(resolution::screen_width);
         unsigned height = static_cast<unsigned>(resolution::screen_height);
+        bool use_screen_edges = false;
         if (FileExists(path))
         {
             width = GetPrivateProfileIntA(
                 "viewport", "internal_width", width, path);
             height = GetPrivateProfileIntA(
                 "viewport", "internal_height", height, path);
+            char top_ui_layout[32] = "centered_4_3";
+            GetPrivateProfileStringA(
+                "viewport", "top_ui_layout", "centered_4_3",
+                top_ui_layout, sizeof(top_ui_layout), path);
+            use_screen_edges = _stricmp(top_ui_layout, "screen_edges") == 0;
         }
-        if (!resolution::Configure(width, height))
+        if (!resolution::Configure(width, height, use_screen_edges))
         {
             FILE *log = fopen("fixed_zoom_renderer.log", "w");
             if (log)

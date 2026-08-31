@@ -91,8 +91,11 @@ namespace
         PresentationCursorPatchState::WaitingForModule;
 
     uintptr_t native_control_at_mouse;
+    uintptr_t native_game_menu_context;
+    uintptr_t native_game_menu_update;
     void *prepared_control_lookup_event;
     void *stabilized_status_control;
+    uint32_t suppress_game_menu_tooltip;
 
     void __declspec(naked) FilterLegacyHudTooltipControl()
     {
@@ -142,17 +145,77 @@ namespace
         }
     }
 
+    void __declspec(naked) FilterLegacyGameMenuTooltip()
+    {
+        __asm {
+            PUSHAD
+            PUSH EDX
+            CALL ShouldSuppressLegacyGameMenuTooltip
+            ADD ESP, 4
+            MOVZX EAX, AL
+            MOV suppress_game_menu_tooltip, EAX
+            POPAD
+            CMP suppress_game_menu_tooltip, 0
+            JNE suppress
+            JMP DWORD PTR [native_game_menu_context]
+        suppress:
+            XOR EAX, EAX
+            RET
+        }
+    }
+
+    void __declspec(naked) FilterLegacyGameMenuControl()
+    {
+        __asm {
+            PUSHAD
+            PUSH ECX
+            CALL PrepareGameMenuControlLookup
+            ADD ESP, 4
+            MOV prepared_control_lookup_event, EAX
+            POPAD
+            MOV ECX, prepared_control_lookup_event
+            TEST ECX, ECX
+            JE suppress
+            CALL DWORD PTR [native_control_at_mouse]
+            PUSHAD
+            PUSH EAX
+            CALL ShouldSuppressLegacyGameMenuTooltip
+            ADD ESP, 4
+            MOVZX EAX, AL
+            MOV suppress_game_menu_tooltip, EAX
+            POPAD
+            CMP suppress_game_menu_tooltip, 0
+            JNE suppress
+            RET
+        suppress:
+            XOR EAX, EAX
+            RET
+        }
+    }
+
+    void __declspec(naked) SynchronizeGameMenuUpdate()
+    {
+        __asm {
+            PUSHAD
+            PUSH ECX
+            CALL SynchronizeGameMenuHoverState
+            ADD ESP, 4
+            POPAD
+            JMP DWORD PTR [native_game_menu_update]
+        }
+    }
+
     // Used only by gameplay hit tests.  Do not enlarge StarCraft's own
     // 0x005993B0 rectangle: the stock renderer also consumes that rectangle
     // and must remain 640x400 inside each compositor pass.
     const Rect32 expanded_game_rect(
         0, 0,
         static_cast<int32_t>(resolution::game_width),
-        static_cast<int32_t>(resolution::game_height));
+        static_cast<int32_t>(resolution::screen_height));
     Rect32 expanded_drag_clip_rect(
         0, 0,
         static_cast<int32_t>(resolution::game_width),
-        static_cast<int32_t>(resolution::game_height));
+        static_cast<int32_t>(resolution::screen_height));
 
     typedef BOOL (WINAPI *ClipCursorFunction)(const RECT *);
     ClipCursorFunction original_clip_cursor;
@@ -245,7 +308,7 @@ namespace
             expanded.right = expanded.left +
                 static_cast<LONG>(resolution::game_width);
             expanded.bottom = expanded.top +
-                static_cast<LONG>(resolution::game_height);
+                static_cast<LONG>(resolution::screen_height);
             forwarded = &expanded;
         }
         else if (!in_game && native_menu_clip)
@@ -752,9 +815,9 @@ namespace
             // the second pair is the normal branch. Both must agree or unit
             // selection fails intermittently depending on selection state.
             { 0x0046FC76, 0x00000280, resolution::game_width, 4 },
-            { 0x0046FC88, 0x00000190, resolution::game_height, 4 },
+            { 0x0046FC88, 0x00000190, resolution::screen_height, 4 },
             { 0x0046FE19, 0x00000280, resolution::game_width, 4 },
-            { 0x0046FE2B, 0x00000190, resolution::game_height, 4 },
+            { 0x0046FE2B, 0x00000190, resolution::screen_height, 4 },
 
             // input_game_left_mouse_click passes the native gameplay RECT to
             // StarCraft's cursor-restriction manager. The manager stores that
@@ -768,7 +831,7 @@ namespace
             // 0x48D5F2 drawing clip stays native because it draws into a
             // 640x400 pass surface.
             { 0x0048D665, 0x0280, resolution::game_width, 2 },
-            { 0x0048D670, 0x0190, resolution::game_height, 2 },
+            { 0x0048D670, 0x0190, resolution::screen_height, 2 },
 
             // Redirect gameplay-only PtInRect calls away from StarCraft's
             // renderer-owned 640x400 rectangle.
@@ -834,40 +897,81 @@ namespace
             uintptr_t address;
             const char *name;
             void *filter;
+            uintptr_t expected_target;
         };
+        constexpr uintptr_t native_lookup_address = 0x00418340;
+        constexpr uintptr_t game_menu_context_address = 0x004F4F70;
+        constexpr uintptr_t game_menu_update_address = 0x004F4FB0;
+        struct GameMenuUpdateInitializer
+        {
+            uintptr_t address;
+            uint8_t destination_register;
+        };
+        const GameMenuUpdateInitializer game_menu_update_initializers[] = {
+            { 0x004F50DB, 0x40 },
+            { 0x004F51B3, 0x46 },
+        };
+        native_control_at_mouse = native_lookup_address + patch->GetDiff();
+        native_game_menu_context =
+            game_menu_context_address + patch->GetDiff();
+        native_game_menu_update =
+            game_menu_update_address + patch->GetDiff();
         const TooltipCallsite callsites[] = {
             // The status panel has two input-event lookups before its periodic
             // status_update_tooltip poll.  Filter both so the obsolete native
             // 4:3 status controls cannot remain tooltip owners after the HUD
             // has been relocated to the bottom-center of the expanded frame.
             { 0x00457E10, "status-event-validation",
-              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl) },
+              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl),
+              native_control_at_mouse },
             { 0x00457E50, "status-tooltip-owner",
-              reinterpret_cast<void *>(&FilterStatusPanelTooltipControl) },
+              reinterpret_cast<void *>(&FilterStatusPanelTooltipControl),
+              native_control_at_mouse },
             // status_update_tooltip owns the center unit-information panel,
             // including multiselection wireframes and the custom GPTP
             // interaction callbacks behind them. It polls independently of
             // the command-card tooltip functions below.
             { 0x00458015, "status-panel-refresh",
-              reinterpret_cast<void *>(&FilterStatusPanelTooltipControl) },
+              reinterpret_cast<void *>(&FilterStatusPanelTooltipControl),
+              native_control_at_mouse },
             { 0x00459796, "refresh",
-              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl) },
+              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl),
+              native_control_at_mouse },
             // refresh_button_tooltip's dialog-parent validation performs a
             // second control_at_mouse lookup and requires it to match the
             // first result.  Status-panel overlays (weapon/armor/shields)
             // depend on that equality before their custom GPTP interaction
             // callback is allowed to create context help.
             { 0x00459825, "status-parent-validation",
-              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl) },
+              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl),
+              native_control_at_mouse },
             { 0x00459870, "mouse-move",
-              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl) },
+              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl),
+              native_control_at_mouse },
             { 0x004A5459, "minimap-refresh",
-              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl) },
+              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl),
+              native_control_at_mouse },
             { 0x004A54BF, "minimap-mouse-move",
-              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl) },
+              reinterpret_cast<void *>(&FilterLegacyHudTooltipControl),
+              native_control_at_mouse },
+            // Game Menu has two independent hover-owner paths. The first can
+            // tail-jump directly into its context function, while the second
+            // owns its mouse-event highlight. Filter their returned control
+            // using the exact relocated button rectangle.
+            { 0x004F509A, "game-menu-refresh-owner",
+              reinterpret_cast<void *>(&FilterLegacyGameMenuControl),
+              native_control_at_mouse },
+            { 0x004F511F, "game-menu-event-owner",
+              reinterpret_cast<void *>(&FilterLegacyGameMenuControl),
+              native_control_at_mouse },
+            // Cosmonarchy gives the F10 button its own GPTP context function,
+            // so it does not pass through the generic control lookups above.
+            // Filter the one verified caller while preserving EDX for GPTP's
+            // dialog argument and chaining to its installed function body.
+            { 0x004F5142, "game-menu-context",
+              reinterpret_cast<void *>(&FilterLegacyGameMenuTooltip),
+              native_game_menu_context },
         };
-        constexpr uintptr_t native_target = 0x00418340;
-        native_control_at_mouse = native_target + patch->GetDiff();
 
         for (const TooltipCallsite &site : callsites)
         {
@@ -877,7 +981,7 @@ namespace
             memcpy(&relative, call + 1, sizeof(relative));
             const uintptr_t decoded_target = reinterpret_cast<uintptr_t>(
                 call + 5 + relative);
-            if (call[0] != 0xE8 || decoded_target != native_control_at_mouse)
+            if (call[0] != 0xE8 || decoded_target != site.expected_target)
             {
                 FILE *log = fopen("fixed_zoom_renderer.log", "a");
                 if (log)
@@ -887,7 +991,39 @@ namespace
                         "address=%p opcode=%02X target=%p expected=%p\n",
                         site.name, call, static_cast<unsigned>(call[0]),
                         reinterpret_cast<void *>(decoded_target),
-                        reinterpret_cast<void *>(native_control_at_mouse));
+                        reinterpret_cast<void *>(site.expected_target));
+                    fclose(log);
+                }
+                return false;
+            }
+        }
+
+        for (const GameMenuUpdateInitializer &site :
+             game_menu_update_initializers)
+        {
+            const uint8_t *update_initializer =
+                reinterpret_cast<const uint8_t *>(
+                    site.address + patch->GetDiff());
+            uint32_t decoded_update = 0;
+            memcpy(&decoded_update, update_initializer + 3,
+                   sizeof(decoded_update));
+            if (update_initializer[0] != 0xC7 ||
+                update_initializer[1] != site.destination_register ||
+                update_initializer[2] != 0x2E ||
+                decoded_update != native_game_menu_update)
+            {
+                FILE *log = fopen("fixed_zoom_renderer.log", "a");
+                if (log)
+                {
+                    fprintf(log,
+                        "game menu update preflight failed: address=%p "
+                        "bytes=%02X %02X %02X target=%p expected=%p\n",
+                        update_initializer,
+                        static_cast<unsigned>(update_initializer[0]),
+                        static_cast<unsigned>(update_initializer[1]),
+                        static_cast<unsigned>(update_initializer[2]),
+                        reinterpret_cast<void *>(decoded_update),
+                        reinterpret_cast<void *>(native_game_menu_update));
                     fclose(log);
                 }
                 return false;
@@ -905,6 +1041,15 @@ namespace
             memcpy(replacement + 1, &relative, sizeof(relative));
             patch->Patch(reinterpret_cast<void *>(site.address), replacement,
                 sizeof(replacement), PATCH_REPLACE);
+        }
+
+        void *update_filter =
+            reinterpret_cast<void *>(&SynchronizeGameMenuUpdate);
+        for (const GameMenuUpdateInitializer &site :
+             game_menu_update_initializers)
+        {
+            patch->Patch(reinterpret_cast<void *>(site.address + 3),
+                         &update_filter, sizeof(update_filter), PATCH_REPLACE);
         }
 
         FILE *log = fopen("fixed_zoom_renderer.log", "a");
@@ -954,7 +1099,7 @@ void EnsureGptpPlacementBounds()
     constexpr uint32_t native_x_max = 639;
     constexpr uint32_t native_y_max = 399;
     const uint32_t expanded_x_max = resolution::game_width - 1;
-    const uint32_t expanded_y_max = resolution::game_height - 1;
+    const uint32_t expanded_y_max = resolution::screen_height - 1;
 
     uint8_t *function = reinterpret_cast<uint8_t *>(module) + function_rva;
     uint8_t *x_instruction = function + x_instruction_offset;
@@ -1771,7 +1916,7 @@ void PrepareExpandedDragClip()
     expanded_drag_clip_rect.right = left +
         static_cast<int32_t>(resolution::game_width);
     expanded_drag_clip_rect.bottom = top +
-        static_cast<int32_t>(resolution::game_height);
+        static_cast<int32_t>(resolution::screen_height);
 
     FILE *log = fopen("fixed_zoom_input.log", "a");
     if (log)

@@ -8,6 +8,7 @@ internal sealed class MainForm : Form
     private readonly ConfigurationService service;
     private readonly ComboBox aspectBox = NewComboBox();
     private readonly ComboBox profileBox = NewComboBox();
+    private readonly ComboBox topTextLayoutBox = NewComboBox();
     private readonly ComboBox presentationBox = NewComboBox();
     private readonly ComboBox scaleBox = NewComboBox();
     private readonly ComboBox displayBox = NewComboBox();
@@ -156,6 +157,8 @@ internal sealed class MainForm : Form
         customDimensions.Controls.Add(customHeightBox);
         grid.Controls.Add(NewLabel("Custom internal:"), 0, 2);
         grid.Controls.Add(customDimensions, 1, 2);
+        grid.Controls.Add(NewLabel("Top text layout:"), 0, 3);
+        grid.Controls.Add(topTextLayoutBox, 1, 3);
         group.Controls.Add(grid);
         return group;
     }
@@ -276,7 +279,7 @@ internal sealed class MainForm : Form
             new ScaleChoice(3m, "3x"),
             new ScaleChoice(4m, "4x"),
         });
-        scaleBox.SelectedIndex = 5;
+        scaleBox.SelectedIndex = 0;
 
         var screens = Screen.AllScreens;
         for (var index = 0; index < screens.Length; ++index)
@@ -299,6 +302,13 @@ internal sealed class MainForm : Form
         });
         filterBox.SelectedIndex = 0;
 
+        topTextLayoutBox.Items.AddRange(new object[]
+        {
+            "Centered 4:3",
+            "Screen edges",
+        });
+        topTextLayoutBox.SelectedIndex = 0;
+
         aspectBox.SelectedIndexChanged += (_, _) =>
         {
             if (loading)
@@ -308,8 +318,8 @@ internal sealed class MainForm : Form
             UpdateCalculatedOutput();
         };
         foreach (var box in new[]
-                 { profileBox, presentationBox, scaleBox, displayBox,
-                   windowModeBox, filterBox })
+                 { profileBox, topTextLayoutBox, presentationBox, scaleBox,
+                   displayBox, windowModeBox, filterBox })
             box.SelectedIndexChanged += (_, _) => UpdateCalculatedOutput();
         customWidthBox.ValueChanged += (_, _) => UpdateCalculatedOutput();
         customHeightBox.ValueChanged += (_, _) => UpdateCalculatedOutput();
@@ -357,6 +367,11 @@ internal sealed class MainForm : Form
                 };
                 PopulateProfileOptions(savedProfile.Id);
             }
+        }
+        if (viewport.TryGetValue("top_ui_layout", out var topTextLayout))
+        {
+            topTextLayoutBox.SelectedIndex = topTextLayout.Equals(
+                "screen_edges", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         }
         if (presentation.TryGetValue("mode", out var mode))
         {
@@ -521,7 +536,9 @@ internal sealed class MainForm : Form
             output.Width, output.Height, windowMode,
             filterBox.SelectedIndex == 1 ? ScalingFilter.Smooth :
                 ScalingFilter.NearestNeighbor,
-            preserveAspectBox.Checked, display);
+            preserveAspectBox.Checked, display,
+            topTextLayoutBox.SelectedIndex == 1 ? TopTextLayout.ScreenEdges :
+                TopTextLayout.Centered4x3);
     }
 
     private RendererProfile GetSelectedProfile()

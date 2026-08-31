@@ -23,7 +23,7 @@ namespace resolution
     constexpr yuint hud_height = native_height - native_hud_top;
     constexpr xuint safe_pass_width = native_width;
     constexpr yuint safe_pass_height = 256;
-    constexpr bool top_ui_uses_screen_edges =
+    inline bool top_ui_uses_screen_edges =
         zoom_resolution_config::top_ui_layout ==
             zoom_resolution_config::TopUiLayout::screen_edges;
 
@@ -59,7 +59,10 @@ namespace resolution
     inline xuint tile_width = native_width;
     inline yuint tile_height = safe_pass_height;
 
-    inline bool Configure(unsigned width, unsigned height)
+    inline bool Configure(unsigned width, unsigned height,
+        bool use_screen_edges =
+            zoom_resolution_config::top_ui_layout ==
+                zoom_resolution_config::TopUiLayout::screen_edges)
     {
         if (width < static_cast<unsigned>(native_width) ||
             height < static_cast<unsigned>(native_height) ||
@@ -68,6 +71,7 @@ namespace resolution
 
         screen_width = xuint(width);
         screen_height = yuint(height);
+        top_ui_uses_screen_edges = use_screen_edges;
         game_width = xuint(width);
         game_height = yuint(height -
             (static_cast<unsigned>(native_height) -
@@ -108,7 +112,8 @@ namespace resolution
             (static_cast<unsigned>(game_width) + tile_columns - 1) /
             tile_columns;
         const unsigned unaligned_tile_height =
-            (static_cast<unsigned>(game_height) + tile_rows - 1) / tile_rows;
+            (static_cast<unsigned>(screen_height) + tile_rows - 1) /
+            tile_rows;
         tile_width = xuint((unaligned_tile_width + camera_quantum - 1) /
             camera_quantum * camera_quantum);
         tile_height = yuint((unaligned_tile_height + camera_quantum - 1) /
@@ -116,6 +121,8 @@ namespace resolution
 
         return tile_width <= native_width &&
             tile_height <= native_safe_game_height &&
+            tile_rows * static_cast<unsigned>(tile_height) >=
+                static_cast<unsigned>(screen_height) &&
             hud_left + native_width <= screen_width &&
             hud_top + hud_height == screen_height &&
             top_ui_left + native_width <= screen_width &&

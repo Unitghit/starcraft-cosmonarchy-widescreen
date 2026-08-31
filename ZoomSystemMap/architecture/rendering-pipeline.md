@@ -29,6 +29,12 @@ For each derived row and column:
    sprites are included.
 9. Copy the safe tile rectangle to the expanded battlefield.
 
+The final tile row also covers the full output height. Pixels below the
+logical battlefield are copied only into the two side gutters outside the
+centered 640-pixel HUD. Tile height is derived from the output height while
+tile count remains derived from the logical battlefield, so this adds no
+private world passes. The HUD is then composed over the center of that strip.
+
 Layer 5 retains GPTP's installed wrapper. Calling raw StarCraft world draw
 `0x004BD580` removed Cosmonarchy's rally lines and other queued `ON_MAP`
 graphics from private passes.
@@ -49,6 +55,7 @@ The outer native frame is compared with a game-only reference to isolate UI
 pixels.
 
 - The 640x166 HUD source at y=314..479 is copied to the bottom center.
+- Real world pixels continue to the bottom edge on both sides of the HUD.
 - Modal popup bounds are read from the active dialog and only that rectangle
   is centered. The whole HUD is never moved when the popup opens.
 - A centered translucent popup cannot reuse the already-composited native
@@ -66,12 +73,13 @@ pixels.
   ornament. The decision uses the active local player's engine race state.
 - Screen-space game text is suppressed in private passes and drawn once over
   the final output.
-- Top-screen objectives and resources have two compile-time policies in
+- Top-screen objectives and resources have two runtime-selectable policies,
+  with the centered policy retained as the compile-time fallback in
   `zoom_resolution.h`. `centered_native_box` places both at opposite sides of
   a horizontally centered 640-wide native box; `screen_edges` places
   objectives at x=0 and translates the native resource strip by
-  `screen_width - native_width`. Both remain flush with y=0. The centered
-  policy is currently active.
+  `screen_width - native_width`. Both remain flush with y=0. The configurator
+  writes `viewport.top_ui_layout`, defaulting to `centered_4_3`.
 - Layer 1's complete context-help backing surface is drawn once at its live
   runtime bounds after HUD composition. HUD tooltips are offset by the derived
   HUD origin; popup help uses the centered native-UI origin. Tooltip pixels do

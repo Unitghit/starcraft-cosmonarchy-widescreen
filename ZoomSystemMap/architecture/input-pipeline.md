@@ -20,9 +20,11 @@ Windows mouse message
 
 ### Battlefield
 
-Points inside 1280x640 are forwarded one-to-one unless solid relocated HUD
-artwork occupies that physical point. StarCraft's semantic gameplay bounds and
-unit-collection bounds are patched to the derived battlefield extent.
+Points inside the output are forwarded one-to-one unless the relocated HUD
+owns them. Selection, placement, cursor hover, drag clipping, and
+unit-collection bounds use the full output height so the visible side gutters
+remain gameplay-active. The centered HUD still intercepts its complete bottom
+row before any gameplay callback.
 
 ### Bottom-centered HUD
 

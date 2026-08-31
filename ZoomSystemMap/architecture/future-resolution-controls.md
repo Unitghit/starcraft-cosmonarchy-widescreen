@@ -10,7 +10,7 @@ The relationship is:
 
 ```text
 logical framebuffer -> renderer/compositor -> presentation scaler -> window/display
-     1280x720                                     2.5x            3200x1800
+     1280x720                                      1x             1280x720
 ```
 
 Changing the logical framebuffer changes how much game world and UI layout the
@@ -91,7 +91,7 @@ Rules:
   **Rebuild required** status.
 - Presentation panel: rational presets plus fit, exact output, fullscreen, and
   filter controls, with **Logical resolution unchanged** shown explicitly.
-- Read-only summary: `1280x720 internal -> 2.5x -> 3200x1800 external`.
+- Read-only summary: `1280x720 internal -> 1x -> 1280x720 external`.
 - Validation should reject non-positive sizes, outputs larger than the selected
   display unless explicitly allowed, and modes whose required fields are
   missing.
@@ -101,6 +101,6 @@ Rules:
 ## Current status
 
 The ownership boundary and portable GUI are implemented. Internal profiles are
-selected independently from external presentation. The initial manifest lists
-only the validated 1280x720 renderer; presentation is runtime-configurable and
-confirmed at 2.5x windowed and 3x borderless fullscreen.
+selected independently from external presentation, which defaults to 1x.
+Presentation remains runtime-configurable and has also been confirmed at 2.5x
+windowed and 3x borderless fullscreen.

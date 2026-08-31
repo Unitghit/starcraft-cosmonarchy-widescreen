@@ -45,6 +45,9 @@ before declaring a resolution build stable.
 - [ ] Objectives and resources remain flush with the top and occupy opposite
       sides of the selected top-UI layout (`centered_native_box` or
       `screen_edges`).
+- [ ] The configurator defaults to `centered_4_3`, saves either top-UI layout,
+      and reloads the saved selection without affecting internal resolution or
+      external presentation.
 - [ ] Drag-selection rectangle appears once at the physical cursor bounds.
 - [ ] Cursor graphic appears once and remains aligned over HUD and battlefield.
 

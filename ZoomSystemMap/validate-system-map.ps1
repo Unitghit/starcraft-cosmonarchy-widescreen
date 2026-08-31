@@ -3,7 +3,14 @@ $ErrorActionPreference = 'Stop'
 $mapRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $workspace = Split-Path -Parent $mapRoot
 $rendererSource = Join-Path $workspace 'ZoomSource\Cosmonarchy-aidebug-resolution'
-$stableGptp = Join-Path $workspace 'Release\plugins\gptp.qdp'
+$installRoot = Join-Path $workspace 'Release'
+if (-not (Test-Path -LiteralPath $installRoot -PathType Container)) {
+    $adjacentInstall = Join-Path (Split-Path -Parent $workspace) 'Release'
+    if (Test-Path -LiteralPath $adjacentInstall -PathType Container) {
+        $installRoot = $adjacentInstall
+    }
+}
+$stableGptp = Join-Path $installRoot 'plugins\gptp.qdp'
 $stableGptpBackup = Join-Path $workspace 'ZoomIntegration\backups\gptp.pre_fixed_zoom.qdp'
 $geometryVerifier = Join-Path $workspace 'ZoomIntegration\verify_fixed_zoom.py'
 $expectedGptpHash = 'CC6BF422B4DC6174EC6B002ACAE12A826D61CBF144661FE0C4F9E3687664BB99'
@@ -105,7 +112,7 @@ $requiredSourcePatterns = @(
     @{ Path = $limitsSource; Pattern = 'sequence_address = 0x004CCEBD' },
     @{ Path = $drawSource; Pattern = 'saved_placement_left' },
     @{ Path = $drawSource; Pattern = 'saved_placement_top' },
-    @{ Path = $drawSource; Pattern = 'reinterpret_cast<const int16_t *>(0x0064095C)' }
+    @{ Path = $drawSource; Pattern = 'DrawLayer &layer = bw::draw_layers[3 + box]' }
     @{ Path = $presentationSource; Pattern = 'settings.client_width = configured_width' },
     @{ Path = $presentationSource; Pattern = 'fixed_zoom_presentation.log' }
     @{ Path = $presentationSource; Pattern = 'cosmonarchy_viewport.ini' }
@@ -119,8 +126,11 @@ $requiredSourcePatterns = @(
     @{ Path = $resolutionHeader; Pattern = 'maximum_screen_width = 3840' }
     @{ Path = $resolutionHeader; Pattern = 'maximum_screen_height = 2160' }
     @{ Path = $resolutionHeader; Pattern = 'inline bool Configure' }
+    @{ Path = $resolutionHeader; Pattern = 'top_ui_uses_screen_edges = use_screen_edges' }
     @{ Path = $mainPatchSource; Pattern = 'ConfigureRuntimeResolution' }
     @{ Path = $mainPatchSource; Pattern = 'resolution::Configure' }
+    @{ Path = $mainPatchSource; Pattern = 'top_ui_layout' }
+    @{ Path = $configuratorSource; Pattern = 'top_ui_layout=' }
 )
 foreach ($check in $requiredSourcePatterns) {
     if (-not (Select-String -LiteralPath $check.Path -SimpleMatch $check.Pattern -Quiet)) {
@@ -133,8 +143,8 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Resolution geometry verification failed'
 }
 
-$rendererInstall = Join-Path $workspace 'Release\plugins\aize_debug.qdp'
-$viewportConfig = Join-Path $workspace 'Release\cosmonarchy_viewport.ini'
+$rendererInstall = Join-Path $installRoot 'plugins\aize_debug.qdp'
+$viewportConfig = Join-Path $installRoot 'cosmonarchy_viewport.ini'
 $configuredWidth = 1280
 $configuredHeight = 720
 if (Test-Path -LiteralPath $viewportConfig -PathType Leaf) {

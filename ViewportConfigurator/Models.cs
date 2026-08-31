@@ -48,6 +48,12 @@ internal enum ScalingFilter
     Smooth,
 }
 
+internal enum TopTextLayout
+{
+    Centered4x3,
+    ScreenEdges,
+}
+
 internal sealed record ViewportSettings(
     RendererProfile Profile,
     PresentationMode PresentationMode,
@@ -59,7 +65,8 @@ internal sealed record ViewportSettings(
     WindowMode WindowMode,
     ScalingFilter Filter,
     bool PreserveAspectRatio,
-    DisplayChoice Display);
+    DisplayChoice Display,
+    TopTextLayout TopTextLayout = TopTextLayout.Centered4x3);
 
 internal sealed record ValidationResult(bool Success, string Message);
 
