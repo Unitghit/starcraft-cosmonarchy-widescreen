@@ -10,11 +10,12 @@ external window size can be adjusted independently.
 ## Install
 
 1. Install [Cosmonarchy](https://www.fraudsclub.com/cosmonarchy-bw/).
-2. Download `Cosmonarchy Widescreen Settings.exe` from the
+2. Download the official ZIP bundle from the
    [latest release](https://github.com/Unitghit/starcraft-cosmonarchy-widescreen/releases/latest).
-3. Place the EXE beside `Cosmonarchy BW.exe`.
-4. Open it and choose your settings.
-5. Select **Save** or **Save & Play**.
+3. Extract the ZIP.
+4. Place `Cosmonarchy Widescreen Settings.exe` beside `Cosmonarchy BW.exe`.
+5. Open it and choose your settings.
+6. Select **Save** or **Save & Play**.
 
 The configurator checks that the installed game build is compatible before it
 changes anything.

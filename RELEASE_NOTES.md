@@ -27,8 +27,9 @@ internal resolution and 2x external scale.
 
 ## Installation
 
-Download the executable and `SHA256SUMS.txt`, verify the checksum, place the
-executable beside `Cosmonarchy BW.exe`, then choose **Save** or **Save & Play**.
+Download the official ZIP bundle and `SHA256SUMS.txt`, verify the checksum,
+extract the bundle, place the executable beside `Cosmonarchy BW.exe`, then
+choose **Save** or **Save & Play**.
 Use **Restore Original** to close the game, return the backed-up renderer and
 pre-install cnc-ddraw settings, and remove generated widescreen files. The
 configurator executable remains so it can be run again or deleted manually.
