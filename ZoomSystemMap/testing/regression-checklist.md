@@ -57,9 +57,14 @@ before declaring a resolution build stable.
 - [ ] Edge scrolling works on all battlefield edges.
 - [ ] Single-click selection works in every battlefield quadrant.
 - [ ] Drag selection starts, crosses x=639 and y=399, and completes correctly.
+- [ ] Modifier-clicking a unit outside the original 640x400 area selects all
+      visible units of the same type.
+- [ ] A selection drag that starts on the battlefield still completes when
+      the left button is released over the bottom HUD.
 - [ ] Right-click commands use the visible destination in every quadrant.
 - [ ] Large unit selections do not activate invisible native controls.
 - [ ] Minimap and command-card controls work only at their presented location.
+- [ ] Ordinary HUD buttons still highlight, show help, and activate normally.
 - [ ] Move the camera away from a selected unit/building, click its bottom-HUD
       portrait, and confirm the sprite lands at the configured battlefield
       center rather than the legacy 640x400 center.

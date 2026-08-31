@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3, selection hotfix
+
+- Fixed Alt-click same-type selection outside the original 4:3 area.
+- Fixed drag selection being canceled when released over the bottom HUD.
+
 ## 0.4.2, compatibility hotfix
 
 - Fixed resolution-dependent horizontal rendering seams.

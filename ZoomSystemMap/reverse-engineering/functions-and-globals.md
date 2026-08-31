@@ -39,6 +39,9 @@ Addresses in the StarCraft tables are absolute addresses for the supported
 | `0x00421603/0A` | Focus-time cursor rectangle operands | Physical 640x480 gate |
 | `0x0046FC76/88` | Alternate visible-unit bounds | Expanded selection collection |
 | `0x0046FE19/2B` | Normal visible-unit bounds | Expanded selection collection |
+| GPTP RVA `0xB52E0` | Same-type selection replacement | Owns both modifier-selection visible-unit rectangles |
+| GPTP RVAs `0xB5437/0xB544B` | Ctrl selection width/height operands | Runtime-expanded from 640x400 |
+| GPTP RVAs `0xB5521/0xB5542` | Ctrl+Shift selection width/height operands | Runtime-expanded from 640x400 |
 | `0x0046FFAA` | Stored drag-clip rectangle pointer | Redirected to expanded rectangle |
 | `0x0048468E` | Gameplay rectangle pointer consumer | Redirected from native rectangle |
 | `0x004D14AA` | Gameplay rectangle pointer consumer | Redirected from native rectangle |

@@ -161,6 +161,28 @@ The immediates begin six bytes into each instruction. The patch accepts either
 the native pair or the already-patched configured pair, uses `VirtualProtect`,
 flushes the instruction cache, restores protection, and logs the result.
 
+### Same-type visible-unit selection
+
+Function RVA: `0x000B52E0`
+
+Stable GPTP replaces StarCraft's `unit_selection_click` at `0x0046FB40`.
+Its modifier-selection branches bypass the native visible-unit bounds and
+construct separate 640x400 rectangles. The following immediate operands are
+patched only after the surrounding non-relocated instructions match the
+stable build:
+
+| GPTP operand RVA | Branch | Native value | Runtime value |
+|---:|---|---:|---:|
+| `0xB5437` | Ctrl width | 640 | `game_width` |
+| `0xB544B` | Ctrl height | 400 | `screen_height` |
+| `0xB5521` | Ctrl+Shift width | 640 | `game_width` |
+| `0xB5542` | Ctrl+Shift height | 400 | `screen_height` |
+
+`EnsureGptpSelectionBounds` accepts either all four native values or all four
+configured values. A mixed value set or any signature mismatch is treated as
+incompatible and no write occurs. The patch runs once after GPTP loads and
+does not alter the module file on disk.
+
 ### Gameplay hover cursor
 
 Selector sequence RVA: `0x000675B8`

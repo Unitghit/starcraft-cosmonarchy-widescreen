@@ -1,5 +1,4 @@
-# StarCraft Cosmonarchy Widescreen 0.4.2
+# StarCraft Cosmonarchy Widescreen 0.4.3
 
-- Fixed resolution-dependent horizontal rendering seams.
-- Improved cnc-ddraw compatibility. Custom `ddraw.ini` settings are preserved,
-  and `ddraw.dll` is never modified.
+- Fixed Alt-click same-type selection outside the original 4:3 area.
+- Fixed drag selection being canceled when released over the bottom HUD.

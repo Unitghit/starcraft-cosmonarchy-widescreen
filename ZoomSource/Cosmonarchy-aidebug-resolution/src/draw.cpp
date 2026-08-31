@@ -1308,6 +1308,7 @@ void BeginStockDrawScreen()
     // its guarded building-placement bounds at the first available frame.
     EnsureGptpPlacementBounds();
     EnsureGptpCursorHoverBounds();
+    EnsureGptpSelectionBounds();
     EnsureGptpCursorWarpGuard();
     EnsureGptpMinimapViewportBox();
     EnsureGptpUpgradeResearchClear();

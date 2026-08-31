@@ -26,6 +26,19 @@ unit-collection bounds use the full output height so the visible side gutters
 remain gameplay-active. The centered HUD still intercepts its complete bottom
 row before any gameplay callback.
 
+When a left-button sequence begins on the battlefield, the window procedure
+keeps battlefield ownership until release. Crossing onto the presented HUD
+during that sequence does not translate the move or release into native HUD
+coordinates. This lets StarCraft finalize a battlefield selection rectangle
+when the pointer is released over the bottom HUD. A sequence that begins on
+the HUD retains native HUD ownership, including minimap capture.
+
+Stable GPTP replaces StarCraft's same-type selection routine and builds its
+own visible-unit rectangle for both modifier branches. The four verified
+640x400 immediates are replaced at runtime with `game_width` and
+`screen_height`, so same-type selection sees units throughout the configured
+viewport. The stable GPTP file on disk is not changed.
+
 ### Bottom-centered HUD
 
 The native STrans mask decides whether a pixel belongs to solid HUD artwork or

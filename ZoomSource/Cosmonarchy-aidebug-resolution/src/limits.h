@@ -21,6 +21,7 @@ void PatchDraw(Common::PatchContext *patch);
 void PrepareExpandedDragClip();
 void EnsureGptpPlacementBounds();
 void EnsureGptpCursorHoverBounds();
+void EnsureGptpSelectionBounds();
 void EnsureGptpCursorWarpGuard();
 void EnsureGptpMinimapViewportBox();
 void EnsureGptpUpgradeResearchClear();

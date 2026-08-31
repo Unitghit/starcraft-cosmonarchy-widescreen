@@ -1747,6 +1747,7 @@ namespace {
     bool latest_physical_mouse_valid;
     bool suppress_legacy_hud_tooltip;
     bool translated_hud_drag_active;
+    bool expanded_battlefield_drag_active;
     bool translated_minimap_drag_active;
     bool suppress_translated_hud_cursor_warp;
     uint16_t latest_status_tooltip_control_index;
@@ -2535,6 +2536,7 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         ExpandedHudConsumesInput(trace_raw_x, trace_raw_y);
     const bool translated_hud_event = trace_mouse &&
         *bw::popup_dialog_active == 0 &&
+        !expanded_battlefield_drag_active &&
         (direct_expanded_hud_hit || translated_hud_drag_active);
     const bool translated_hud_button_event = translated_hud_event &&
         (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP ||
@@ -2563,13 +2565,18 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         if ((msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) &&
             *bw::popup_dialog_active == 0 &&
             !direct_expanded_hud_hit &&
+            trace_raw_x >= 0 &&
+            trace_raw_x < static_cast<int>(resolution::game_width) &&
             trace_raw_y >= 0 &&
             trace_raw_y < static_cast<int>(resolution::screen_height)) {
             PrepareExpandedDragClip();
+            expanded_battlefield_drag_active = true;
+            translated_hud_drag_active = false;
         }
         if ((msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) &&
             direct_expanded_hud_hit) {
             translated_hud_drag_active = true;
+            expanded_battlefield_drag_active = false;
         }
         switch (msg) {
             case WM_MOUSEMOVE:
@@ -2890,11 +2897,13 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
     }
     if (trace_mouse && msg == WM_LBUTTONUP) {
         translated_hud_drag_active = false;
+        expanded_battlefield_drag_active = false;
         translated_minimap_drag_active = false;
     }
     if (msg == WM_CANCELMODE || msg == WM_CAPTURECHANGED ||
         msg == WM_KILLFOCUS) {
         translated_hud_drag_active = false;
+        expanded_battlefield_drag_active = false;
         translated_minimap_drag_active = false;
         if (latest_physical_mouse_valid) {
             *bw::mouse_clickpos_x = latest_physical_mouse_x;

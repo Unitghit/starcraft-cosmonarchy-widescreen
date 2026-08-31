@@ -38,6 +38,16 @@ namespace
     GptpCursorHoverPatchState gptp_cursor_hover_patch_state =
         GptpCursorHoverPatchState::WaitingForModule;
 
+    enum class GptpSelectionBoundsPatchState
+    {
+        WaitingForModule,
+        Installed,
+        Incompatible,
+    };
+
+    GptpSelectionBoundsPatchState gptp_selection_bounds_patch_state =
+        GptpSelectionBoundsPatchState::WaitingForModule;
+
     enum class GptpCursorWarpPatchState
     {
         WaitingForModule,
@@ -1279,6 +1289,166 @@ void EnsureGptpCursorHoverBounds()
     gptp_cursor_hover_patch_state = GptpCursorHoverPatchState::Installed;
 }
 
+void EnsureGptpSelectionBounds()
+{
+    if (gptp_selection_bounds_patch_state !=
+        GptpSelectionBoundsPatchState::WaitingForModule)
+        return;
+
+    HMODULE module = GetModuleHandleA("gptp.qdp");
+    if (!module)
+        module = GetModuleHandleA("CM-GPTP-Release.qdp");
+    if (!module)
+        return;
+
+    // Stable Cosmonarchy GPTP replaces StarCraft's unit_selection_click.
+    // Both its Ctrl and Ctrl+Shift paths build their own 640x400 visible-unit
+    // rectangle, so the native StarCraft selection operand patches never
+    // execute for same-type selection. Replace all four GPTP immediates after
+    // verifying the surrounding non-relocated instruction bytes.
+    constexpr uintptr_t ctrl_width_rva = 0x000B5437;
+    constexpr uintptr_t ctrl_height_rva = 0x000B544B;
+    constexpr uintptr_t ctrl_shift_width_rva = 0x000B5521;
+    constexpr uintptr_t ctrl_shift_height_rva = 0x000B5542;
+    constexpr uint32_t native_width = 640;
+    constexpr uint32_t native_height = 400;
+    const uint32_t expanded_width = resolution::game_width;
+    const uint32_t expanded_height = resolution::screen_height;
+
+    uint8_t *base = reinterpret_cast<uint8_t *>(module);
+    uint32_t *ctrl_width = reinterpret_cast<uint32_t *>(
+        base + ctrl_width_rva);
+    uint32_t *ctrl_height = reinterpret_cast<uint32_t *>(
+        base + ctrl_height_rva);
+    uint32_t *ctrl_shift_width = reinterpret_cast<uint32_t *>(
+        base + ctrl_shift_width_rva);
+    uint32_t *ctrl_shift_height = reinterpret_cast<uint32_t *>(
+        base + ctrl_shift_height_rva);
+
+    const uint8_t ctrl_prefix[] = {
+        0x0F, 0xB7, 0x08, 0x8D, 0x82,
+    };
+    const uint8_t ctrl_between[] = {
+        0x66, 0x89, 0x85, 0x74, 0xF8, 0xFF, 0xFF,
+        0x66, 0x89, 0x8D, 0x72, 0xF8, 0xFF, 0xFF,
+        0x8D, 0x81,
+    };
+    const uint8_t ctrl_suffix[] = {
+        0x8D, 0x8D, 0x70, 0xF8, 0xFF, 0xFF,
+        0x66, 0x89, 0x85, 0x76, 0xF8, 0xFF, 0xFF,
+    };
+    const uint8_t ctrl_shift_prefix[] = {
+        0x66, 0x89, 0xB5, 0x70, 0xF8, 0xFF, 0xFF,
+        0x0F, 0xB7, 0x10, 0x8D, 0x86,
+    };
+    const uint8_t ctrl_shift_between_before_copy[] = {
+        0xBE,
+    };
+    const uint8_t ctrl_shift_between_after_copy[] = {
+        0x66, 0x89, 0x85, 0x74, 0xF8, 0xFF, 0xFF,
+        0xF3, 0xA5,
+        0x8D, 0x8D, 0x70, 0xF8, 0xFF, 0xFF,
+        0x66, 0x89, 0x95, 0x72, 0xF8, 0xFF, 0xFF,
+        0x8D, 0x82,
+    };
+    const uint8_t ctrl_shift_suffix[] = {
+        0x66, 0x89, 0x85, 0x76, 0xF8, 0xFF, 0xFF,
+    };
+
+    const bool signature_matches =
+        memcmp(base + ctrl_width_rva - sizeof(ctrl_prefix), ctrl_prefix,
+               sizeof(ctrl_prefix)) == 0 &&
+        memcmp(base + ctrl_width_rva + sizeof(uint32_t), ctrl_between,
+               sizeof(ctrl_between)) == 0 &&
+        memcmp(base + ctrl_height_rva + sizeof(uint32_t), ctrl_suffix,
+               sizeof(ctrl_suffix)) == 0 &&
+        memcmp(base + ctrl_shift_width_rva - sizeof(ctrl_shift_prefix),
+               ctrl_shift_prefix, sizeof(ctrl_shift_prefix)) == 0 &&
+        memcmp(base + ctrl_shift_width_rva + sizeof(uint32_t),
+               ctrl_shift_between_before_copy,
+               sizeof(ctrl_shift_between_before_copy)) == 0 &&
+        memcmp(base + ctrl_shift_width_rva + sizeof(uint32_t) + 5,
+               ctrl_shift_between_after_copy,
+               sizeof(ctrl_shift_between_after_copy)) == 0 &&
+        memcmp(base + ctrl_shift_height_rva + sizeof(uint32_t),
+               ctrl_shift_suffix, sizeof(ctrl_shift_suffix)) == 0;
+    const bool original_bounds =
+        *ctrl_width == native_width &&
+        *ctrl_height == native_height &&
+        *ctrl_shift_width == native_width &&
+        *ctrl_shift_height == native_height;
+    const bool already_patched =
+        *ctrl_width == expanded_width &&
+        *ctrl_height == expanded_height &&
+        *ctrl_shift_width == expanded_width &&
+        *ctrl_shift_height == expanded_height;
+
+    FILE *log = fopen("fixed_zoom_renderer.log", "a");
+    if (!signature_matches || (!original_bounds && !already_patched))
+    {
+        if (log)
+        {
+            fprintf(log,
+                "GPTP selection bounds preflight failed: module=%p "
+                "signature=%u ctrl=(%lu,%lu) ctrl-shift=(%lu,%lu)\n",
+                module, static_cast<unsigned>(signature_matches),
+                static_cast<unsigned long>(*ctrl_width),
+                static_cast<unsigned long>(*ctrl_height),
+                static_cast<unsigned long>(*ctrl_shift_width),
+                static_cast<unsigned long>(*ctrl_shift_height));
+            fclose(log);
+        }
+        gptp_selection_bounds_patch_state =
+            GptpSelectionBoundsPatchState::Incompatible;
+        return;
+    }
+
+    if (original_bounds)
+    {
+        uint8_t *patch_start = base + ctrl_width_rva - 2;
+        const size_t patch_size =
+            ctrl_shift_height_rva + sizeof(uint32_t) -
+            (ctrl_width_rva - 2);
+        DWORD old_protection = 0;
+        if (!VirtualProtect(patch_start, patch_size, PAGE_EXECUTE_READWRITE,
+                            &old_protection))
+        {
+            if (log)
+            {
+                fprintf(log,
+                    "GPTP selection bounds VirtualProtect failed: "
+                    "error=%lu\n",
+                    static_cast<unsigned long>(GetLastError()));
+                fclose(log);
+            }
+            gptp_selection_bounds_patch_state =
+                GptpSelectionBoundsPatchState::Incompatible;
+            return;
+        }
+        *ctrl_width = expanded_width;
+        *ctrl_height = expanded_height;
+        *ctrl_shift_width = expanded_width;
+        *ctrl_shift_height = expanded_height;
+        FlushInstructionCache(GetCurrentProcess(), patch_start, patch_size);
+        DWORD ignored = 0;
+        VirtualProtect(patch_start, patch_size, old_protection, &ignored);
+    }
+
+    if (log)
+    {
+        fprintf(log,
+            "GPTP selection bounds installed: module=%p "
+            "ctrl=(%lu,%lu) ctrl-shift=(%lu,%lu)\n",
+            module, static_cast<unsigned long>(*ctrl_width),
+            static_cast<unsigned long>(*ctrl_height),
+            static_cast<unsigned long>(*ctrl_shift_width),
+            static_cast<unsigned long>(*ctrl_shift_height));
+        fclose(log);
+    }
+    gptp_selection_bounds_patch_state =
+        GptpSelectionBoundsPatchState::Installed;
+}
+
 void EnsureGptpCursorWarpGuard()
 {
     if (gptp_cursor_warp_patch_state !=
@@ -1965,6 +2135,7 @@ void PatchDraw(Common::PatchContext *patch)
     // plugin load order permits. Keep BeginStockDrawScreen's call as a
     // fallback for installations where GPTP is loaded after aidebug.
     EnsureGptpInitialCameraCenter();
+    EnsureGptpSelectionBounds();
     PatchInteractionBounds(patch);
     PatchStartLocationCameraOrigin(patch);
     PatchTriggerCenterView(patch);

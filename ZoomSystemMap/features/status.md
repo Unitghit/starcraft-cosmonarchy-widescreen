@@ -19,6 +19,8 @@ Status here refers to the current 1280x720 build unless noted otherwise.
 | Middle-mouse pan rendering | Fixed, confirmed | User test; gesture-time UI extraction uses a fresh current-camera pass paired with the fresh game-only reference, preventing stale stock-map pixels from becoming ghost UI bands |
 | Cursor can traverse expanded client | Confirmed | Input trace reaches x=1279 |
 | Click and drag beyond native 4:3 | Confirmed | User test and raw/forwarded command traces |
+| Same-type modifier selection | Expanded, confirmed | Stable-GPTP Ctrl and Ctrl+Shift visible-unit rectangles derive from runtime viewport dimensions; user test outside the original 4:3 area |
+| Battlefield drag released over HUD | Fixed, confirmed | Battlefield-originated left-button sequences retain gameplay ownership through release; user test |
 | Invisible native HUD hit targets | Fixed, confirmed | User test of menu/minimap collision path |
 | Minimap camera viewport outline | Dynamic runtime override, confirmed | User test; GPTP globals derived from internal battlefield dimensions and per-map zoom level |
 | Match-start camera | Expanded, confirmed | User test; CHK start-location encoder derives `20x8` camera-center tiles from configured `(640,260)` pixels before `InitScreenPositions` restores them |
