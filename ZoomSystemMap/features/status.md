@@ -15,6 +15,7 @@ Status here refers to the current 1280x720 build unless noted otherwise.
 | Top-screen objectives/resources layout | Both modes confirmed; centered active | `centered_native_box` and resolution-derived `screen_edges` policies passed user tests |
 | Duplicate/flickering text UI | Fixed, confirmed | Text drawn once after composition |
 | Duplicate selection rectangle | Fixed, confirmed | Direct once-per-frame expanded draw |
+| Middle-mouse pan rendering | Fixed, confirmed | User test; gesture-time UI extraction uses a fresh current-camera pass paired with the fresh game-only reference, preventing stale stock-map pixels from becoming ghost UI bands |
 | Cursor can traverse expanded client | Confirmed | Input trace reaches x=1279 |
 | Click and drag beyond native 4:3 | Confirmed | User test and raw/forwarded command traces |
 | Invisible native HUD hit targets | Fixed, confirmed | User test of menu/minimap collision path |

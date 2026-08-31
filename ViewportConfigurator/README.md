@@ -50,7 +50,10 @@ Release/
 The configurator embeds the viewport renderer. It transactionally replaces
 `plugins/aize_debug.qdp`, updates only the top-level cnc-ddraw settings it owns,
 and verifies installed hashes. **Restore Original** restores the files captured
-before the first Save.
+before the first Save, then removes the generated viewport configuration,
+installation record, backups, configurator log, and `fixed_zoom*` diagnostics.
+The configurator executable remains so the user can run it again or delete it
+manually.
 
 The configurator never writes, replaces, restores, or distributes `gptp.qdp`.
 It only verifies the compatible GPTP hash before installing fixed-address

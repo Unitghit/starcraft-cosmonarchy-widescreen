@@ -82,10 +82,9 @@ internal sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(18),
             ColumnCount = 1,
-            RowCount = 8,
+            RowCount = 7,
             AutoScroll = true,
         };
-        outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -99,17 +98,9 @@ internal sealed class MainForm : Form
             Text = "Cosmonarchy Widescreen Settings",
             AutoSize = true,
             Font = new Font(Font.FontFamily, 16, FontStyle.Bold),
-            Margin = new Padding(0, 0, 0, 4),
-        };
-        var subtitle = new Label
-        {
-            Text = "Internal viewport and external presentation are independent.",
-            AutoSize = true,
-            ForeColor = SystemColors.GrayText,
             Margin = new Padding(0, 0, 0, 14),
         };
         outer.Controls.Add(title);
-        outer.Controls.Add(subtitle);
         outer.Controls.Add(BuildInstallationGroup());
         outer.Controls.Add(BuildInternalGroup());
         outer.Controls.Add(BuildPresentationGroup());
@@ -165,16 +156,6 @@ internal sealed class MainForm : Form
         customDimensions.Controls.Add(customHeightBox);
         grid.Controls.Add(NewLabel("Custom internal:"), 0, 2);
         grid.Controls.Add(customDimensions, 1, 2);
-        var note = new Label
-        {
-            Text = "Changes world coverage and HUD geometry. 16:9 presets are " +
-                "supported; 4:3 presets remain experimental. Custom dimensions " +
-                "may use any value from 640 x 480 through 3840 x 2160.",
-            AutoSize = true,
-            ForeColor = SystemColors.GrayText,
-            MaximumSize = new Size(430, 0),
-        };
-        grid.Controls.Add(note, 1, 3);
         group.Controls.Add(grid);
         return group;
     }
@@ -585,7 +566,7 @@ internal sealed class MainForm : Form
             var settings = BuildSettings();
             service.Apply(settings);
             statusLabel.ForeColor = Color.DarkGreen;
-            statusLabel.Text = "Settings saved and verified.";
+            statusLabel.Text = "Settings saved.";
             RefreshInstallationStatus();
             if (launch)
                 service.LaunchGame();
@@ -609,7 +590,7 @@ internal sealed class MainForm : Form
                 return;
             service.Restore();
             statusLabel.ForeColor = Color.DarkGreen;
-            statusLabel.Text = "Original files restored.";
+            statusLabel.Text = "Original files restored. Widescreen files removed.";
             RefreshInstallationStatus();
         }
         catch (Exception exception)

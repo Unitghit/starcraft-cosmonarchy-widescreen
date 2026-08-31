@@ -114,8 +114,13 @@ internal static class Program
                 throw new ArgumentException($"Unknown command: {command}");
             }
 
-            File.WriteAllText(service.Paths.ConfiguratorLogPath,
-                $"{DateTimeOffset.Now:O} {command}: PASS - {message}{Environment.NewLine}");
+            // A successful restore deliberately leaves no configurator-owned
+            // files behind. Do not recreate the log after cleanup.
+            if (!command.Equals("--restore", StringComparison.OrdinalIgnoreCase))
+            {
+                File.WriteAllText(service.Paths.ConfiguratorLogPath,
+                    $"{DateTimeOffset.Now:O} {command}: PASS - {message}{Environment.NewLine}");
+            }
             return 0;
         }
         catch (Exception exception)

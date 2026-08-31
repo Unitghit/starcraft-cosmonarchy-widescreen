@@ -16,6 +16,12 @@
   modal transparency to resolution-derived geometry.
 - Added transactional installation, verified restoration, binary compatibility
   checks, and stable-GPTP protection.
+- Fixed ghostly map bands during middle-mouse panning by pairing fresh UI and
+  world passes for the duration of the gesture.
+- Made Restore Original close the launcher/game first, verify the restored
+  renderer and display settings, and remove generated widescreen state,
+  backups, logs, and diagnostics.
+- Simplified explanatory copy in the configurator.
 - Added architecture/system-map documentation and automated geometry/source
   validation.
 

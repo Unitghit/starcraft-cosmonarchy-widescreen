@@ -57,6 +57,7 @@ namespace
     uint8_t native_work[native_frame_size];
     uint8_t native_tile[native_frame_size];
     uint8_t native_game_reference[native_frame_size];
+    uint8_t native_current_ui_frame[native_frame_size];
     uint8_t native_popup_reference[native_frame_size];
     uint8_t native_popup_frame[native_frame_size];
     uint8_t native_game_text_frame[native_frame_size];
@@ -1373,6 +1374,23 @@ void AfterStockDrawScreen()
             dump_placement_passes = false;
         dump_private_passes = false;
 
+        // StarCraft only partially refreshes its stock backing surface while
+        // middle-mouse panning. Comparing that stale surface with the fully
+        // redrawn first world tile can misclassify old map pixels as UI and
+        // stamp ghost map bands into the centered top and bottom UI regions.
+        // Generate a fresh UI pass at the same camera as the fresh game-only
+        // reference for the duration of the gesture. Normal rendering keeps
+        // the existing path and pays no additional pass cost.
+        const bool middle_pan_active =
+            (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+        const uint8_t *native_ui_frame = native_stock_frame;
+        if (middle_pan_active)
+        {
+            RunStockPopupPass(camera_x, camera_y, camera_x, camera_y,
+                              native_current_ui_frame);
+            native_ui_frame = native_current_ui_frame;
+        }
+
         const bool popup_active = *bw::popup_dialog_active != 0;
         const PopupBounds popup = GetPopupBounds(popup_active);
         static bool last_popup_active;
@@ -1435,7 +1453,7 @@ void AfterStockDrawScreen()
                         static_cast<size_t>(source_y) *
                             resolution::native_width + source_x;
                     const bool differs_from_world =
-                        native_stock_frame[native_index] !=
+                        native_ui_frame[native_index] !=
                         native_game_reference[native_index];
 
                     if (IsRelocatedNativeHudProtrusion(
@@ -1456,7 +1474,7 @@ void AfterStockDrawScreen()
                                 static_cast<size_t>(hud_vertical_offset +
                                     source_y) * resolution::screen_width +
                                 resolution::hud_left + source_x] =
-                                    native_stock_frame[native_index];
+                                    native_ui_frame[native_index];
                         }
                         continue;
                     }
@@ -1472,7 +1490,7 @@ void AfterStockDrawScreen()
                             resolution::screen_width +
                             resolution::top_ui_right_native_origin +
                             source_x] =
-                            native_stock_frame[native_index];
+                            native_ui_frame[native_index];
                     }
                 }
             }
@@ -1494,7 +1512,7 @@ void AfterStockDrawScreen()
                     static_cast<size_t>(source_y) *
                         resolution::native_width + source_x;
                 const bool differs_from_world =
-                    native_stock_frame[native_index] !=
+                    native_ui_frame[native_index] !=
                         native_game_reference[native_index];
                 if (source_y >= resolution::native_game_height ||
                     differs_from_world ||
@@ -1504,7 +1522,7 @@ void AfterStockDrawScreen()
                         static_cast<size_t>(destination_y) *
                             resolution::screen_width +
                         resolution::hud_left + source_x] =
-                        native_stock_frame[native_index];
+                        native_ui_frame[native_index];
                 }
             }
         }

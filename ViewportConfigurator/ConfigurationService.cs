@@ -107,7 +107,12 @@ internal sealed class ConfigurationService
     public void RequestGameShutdown(TimeSpan timeout)
     {
         var processes = GetGameProcesses();
-        foreach (var process in processes)
+        // Close the launcher/host before StarCraft so it cannot interpret the
+        // game exit as a request to relaunch the child while settings files are
+        // about to be replaced.
+        foreach (var process in processes.OrderBy(process =>
+                     process.ProcessName.Equals("StarCraft",
+                         StringComparison.OrdinalIgnoreCase) ? 1 : 0))
         {
             try
             {
@@ -197,12 +202,42 @@ internal sealed class ConfigurationService
                 manifest.OriginalRendererSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("The original renderer backup failed validation.");
 
-        AtomicWrite(Paths.RendererPath, File.ReadAllBytes(Paths.RendererBackupPath));
-        AtomicWrite(Paths.DdrawPath, File.ReadAllBytes(Paths.DdrawBackupPath));
-        if (File.Exists(Paths.ViewportConfigPath))
-            File.Delete(Paths.ViewportConfigPath);
-        if (File.Exists(Paths.StatePath))
-            File.Delete(Paths.StatePath);
+        var originalRenderer = File.ReadAllBytes(Paths.RendererPath);
+        var originalDdraw = File.ReadAllBytes(Paths.DdrawPath);
+        var originalConfig = File.Exists(Paths.ViewportConfigPath) ?
+            File.ReadAllBytes(Paths.ViewportConfigPath) : null;
+        var originalState = File.Exists(Paths.StatePath) ?
+            File.ReadAllBytes(Paths.StatePath) : null;
+        var rendererBackup = File.ReadAllBytes(Paths.RendererBackupPath);
+        var ddrawBackup = File.ReadAllBytes(Paths.DdrawBackupPath);
+
+        try
+        {
+            AtomicWrite(Paths.RendererPath, rendererBackup);
+            AtomicWrite(Paths.DdrawPath, ddrawBackup);
+            DeleteIfPresent(Paths.ViewportConfigPath);
+            DeleteIfPresent(Paths.StatePath);
+
+            if (!HashFile(Paths.RendererPath).Equals(
+                    manifest.OriginalRendererSha256,
+                    StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Restored renderer verification failed.");
+            if (!HashFile(Paths.DdrawPath).Equals(Hash(ddrawBackup),
+                    StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Restored ddraw settings verification failed.");
+            if (File.Exists(Paths.ViewportConfigPath) || File.Exists(Paths.StatePath))
+                throw new IOException("Widescreen configuration cleanup failed.");
+        }
+        catch
+        {
+            AtomicWrite(Paths.RendererPath, originalRenderer);
+            AtomicWrite(Paths.DdrawPath, originalDdraw);
+            RestoreOptionalFile(Paths.ViewportConfigPath, originalConfig);
+            RestoreOptionalFile(Paths.StatePath, originalState);
+            throw;
+        }
+
+        DeleteOwnedResiduals();
     }
 
     public void LaunchGame()
@@ -358,6 +393,44 @@ internal sealed class ConfigurationService
             if (File.Exists(temporary))
                 File.Delete(temporary);
         }
+    }
+
+    private static void DeleteIfPresent(string path)
+    {
+        if (File.Exists(path))
+            File.Delete(path);
+    }
+
+    private void DeleteOwnedResiduals()
+    {
+        DeleteIfPresent(Paths.ViewportConfigPath);
+        DeleteIfPresent(Paths.StatePath);
+        DeleteIfPresent(Paths.ConfiguratorLogPath);
+
+        foreach (var path in Directory.EnumerateFiles(
+                     Paths.ReleaseDirectory, "fixed_zoom*",
+                     SearchOption.TopDirectoryOnly))
+            File.Delete(path);
+
+        DeleteIfPresent(Paths.RendererBackupPath);
+        DeleteIfPresent(Paths.DdrawBackupPath);
+        DeleteDirectoryIfEmpty(Paths.BackupDirectory);
+        DeleteDirectoryIfEmpty(Paths.StateDirectory);
+    }
+
+    private static void DeleteDirectoryIfEmpty(string path)
+    {
+        if (Directory.Exists(path) &&
+            !Directory.EnumerateFileSystemEntries(path).Any())
+            Directory.Delete(path, false);
+    }
+
+    private static void RestoreOptionalFile(string path, byte[]? bytes)
+    {
+        if (bytes is null)
+            DeleteIfPresent(path);
+        else
+            AtomicWrite(path, bytes);
     }
 
     private static byte[] ReadResource(string name)
