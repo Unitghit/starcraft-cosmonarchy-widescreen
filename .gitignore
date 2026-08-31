@@ -1,0 +1,42 @@
+# Build output
+artifacts/
+**/bin/
+**/obj/
+**/publish/
+**/Release/
+**/Debug/
+**/FastDebug/
+**/x86/
+**/.vs/
+ZoomSource/profile-obj/
+
+# Generated renderer payload and link output
+ViewportConfigurator/Payloads/
+*.qdp
+*.dll
+*.exe
+*.lib
+*.exp
+*.obj
+*.pdb
+*.ilk
+*.tlog
+*.lastbuildstate
+
+# Local runtime/diagnostic output
+*.log
+*.dmp
+*.raw
+*.bin
+*.zip
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.user
+__pycache__/
+.DS_Store
+Thumbs.db
+
+# Required, redistributable FreeType import/static library retained upstream.
+!ZoomSource/Cosmonarchy-aidebug-resolution/deps/freetype/freetype.lib

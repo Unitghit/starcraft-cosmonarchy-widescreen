@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Cosmonarchy Widescreen Settings</AssemblyName>
+    <RootNamespace>CosmonarchyWidescreen</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>embedded</DebugType>
+    <PublishTrimmed>false</PublishTrimmed>
+    <Version>0.3.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Payloads\1280x720\aize_debug.qdp"
+                      LogicalName="CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp" />
+    <EmbeddedResource Include="..\ZoomSource\Cosmonarchy-aidebug-resolution\LICENSE"
+                      Link="Payload\AIDEBUG-LICENSE.txt"
+                      LogicalName="CosmonarchyWidescreen.Payload.AIDEBUG-LICENSE.txt" />
+    <EmbeddedResource Include="compatibility-manifest.json"
+                      LogicalName="CosmonarchyWidescreen.Payload.compatibility-manifest.json" />
+  </ItemGroup>
+</Project>

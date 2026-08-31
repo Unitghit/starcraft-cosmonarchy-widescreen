@@ -1,0 +1,19 @@
+# Release checklist
+
+- [ ] Renderer Release/Win32 rebuild succeeds.
+- [ ] Configurator Release publish succeeds without warnings.
+- [ ] Offline geometry matrix passes every preset and representative custom
+      aspect ratios, including the 3840x2160 maximum.
+- [ ] Clean-install **Save**, **Save & Play**, and **Restore Original** pass.
+- [ ] `--validate`, representative `--apply-profile`, `--apply-custom`, and
+      `--restore` smoke commands pass in an isolated compatible installation.
+- [ ] 1280x720 full interactive regression checklist passes.
+- [ ] At least one non-preset custom resolution starts and renders.
+- [ ] 3840x2160 reaches a match; long load-time warning remains visible.
+- [ ] Stable GPTP SHA-256 remains
+      `CC6BF422B4DC6174EC6B002ACAE12A826D61CBF144661FE0C4F9E3687664BB99`.
+- [ ] Source tree contains no game executables, QDPs, maps, archives, memory
+      dumps, logs, screenshots, or local absolute paths.
+- [ ] Version, changelog, release notes, executable, and SHA-256 checksum agree.
+- [ ] GitHub release includes the executable and checksum; GitHub-generated
+      source archives remain enabled.

@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.34928.147
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "teippi", "teippi.vcxproj", "{B204689E-C8B8-433C-9B31-51D8BC09E567}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x86 = Debug|x86
+		FastDebug|x86 = FastDebug|x86
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B204689E-C8B8-433C-9B31-51D8BC09E567}.Debug|x86.ActiveCfg = Debug|Win32
+		{B204689E-C8B8-433C-9B31-51D8BC09E567}.Debug|x86.Build.0 = Debug|Win32
+		{B204689E-C8B8-433C-9B31-51D8BC09E567}.FastDebug|x86.ActiveCfg = FastDebug|Win32
+		{B204689E-C8B8-433C-9B31-51D8BC09E567}.FastDebug|x86.Build.0 = FastDebug|Win32
+		{B204689E-C8B8-433C-9B31-51D8BC09E567}.Release|x86.ActiveCfg = Release|Win32
+		{B204689E-C8B8-433C-9B31-51D8BC09E567}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C07904FF-AFA3-4BFD-9D24-0B37756B059A}
+	EndGlobalSection
+EndGlobal

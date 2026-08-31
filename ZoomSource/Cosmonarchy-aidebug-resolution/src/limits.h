@@ -1,0 +1,31 @@
+#ifndef LIMIT_H
+#define LIMIT_H
+
+#include "types.h"
+
+extern Common::PatchManager *patch_mgr;
+
+namespace Limits {
+    const unsigned MapWidth_Tiles = 256;
+    const unsigned MapHeight_Tiles = 256;
+    const unsigned ActivePlayers = 8;
+    const unsigned Players = 12;
+    const unsigned Selection = 12;
+    const unsigned Teams = 4;
+}
+
+inline bool is_active_player(int player) { return player >= 0 && player < Limits::ActivePlayers; }
+
+void RemoveLimits(Common::PatchContext *patch);
+void PatchDraw(Common::PatchContext *patch);
+void PrepareExpandedDragClip();
+void EnsureGptpPlacementBounds();
+void EnsureGptpCursorHoverBounds();
+void EnsureGptpCursorWarpGuard();
+void EnsureGptpMinimapViewportBox();
+void EnsureGptpUpgradeResearchClear();
+void EnsureGptpInitialCameraCenter();
+void EnsurePresentationCursorGuards();
+
+#endif // LIMIT_H
+

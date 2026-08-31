@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "starCraftSha256": "AD6B58B27B8948845CCFA69BCFCC1B10D6AA7A27A371EE3E61453925288C6A46",
+  "gptpSha256": "CC6BF422B4DC6174EC6B002ACAE12A826D61CBF144661FE0C4F9E3687664BB99",
+  "hotloaderSha256": "FDD2146FCF1EB26931DC7B422CA4F9A2A2D35A8F54909092A6AA5F27DF5B1A6F",
+  "originalRendererSha256": "D6BC6736308873489BD7E52F27262EF5B4754C03E9BB6644AAB1AA14C3815017",
+  "rendererProfiles": [
+    {
+      "id": "1280x720-runtime-v1",
+      "displayName": "1280 x 720 (Recommended)",
+      "width": 1280,
+      "height": 720,
+      "aspectRatio": "16:9",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    },
+    {
+      "id": "960x540-runtime-v1",
+      "displayName": "960 x 540",
+      "width": 960,
+      "height": 540,
+      "aspectRatio": "16:9",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    },
+    {
+      "id": "1024x576-runtime-v1",
+      "displayName": "1024 x 576",
+      "width": 1024,
+      "height": 576,
+      "aspectRatio": "16:9",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    },
+    {
+      "id": "1600x900-runtime-v1",
+      "displayName": "1600 x 900",
+      "width": 1600,
+      "height": 900,
+      "aspectRatio": "16:9",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    },
+    {
+      "id": "1920x1080-runtime-v1",
+      "displayName": "1920 x 1080",
+      "width": 1920,
+      "height": 1080,
+      "aspectRatio": "16:9",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    },
+    {
+      "id": "2560x1440-runtime-v1",
+      "displayName": "2560 x 1440",
+      "width": 2560,
+      "height": 1440,
+      "aspectRatio": "16:9",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    },
+    {
+      "id": "3840x2160-runtime-v1",
+      "displayName": "3840 x 2160 (4K)",
+      "width": 3840,
+      "height": 2160,
+      "aspectRatio": "16:9",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    },
+    {
+      "id": "640x480-v1",
+      "displayName": "640 x 480 (Experimental, Native size)",
+      "width": 640,
+      "height": 480,
+      "aspectRatio": "4:3",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    },
+    {
+      "id": "800x600-v1",
+      "displayName": "800 x 600 (Experimental)",
+      "width": 800,
+      "height": 600,
+      "aspectRatio": "4:3",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    },
+    {
+      "id": "960x720-v1",
+      "displayName": "960 x 720 (Experimental)",
+      "width": 960,
+      "height": 720,
+      "aspectRatio": "4:3",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    },
+    {
+      "id": "1280x960-v1",
+      "displayName": "1280 x 960 (Experimental)",
+      "width": 1280,
+      "height": 960,
+      "aspectRatio": "4:3",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    },
+    {
+      "id": "custom-runtime-v1",
+      "displayName": "Custom internal resolution",
+      "width": 1280,
+      "height": 720,
+      "aspectRatio": "Custom",
+      "payloadResource": "CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp"
+    }
+  ]
+}

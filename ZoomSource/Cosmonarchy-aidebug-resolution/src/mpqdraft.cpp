@@ -1,0 +1,106 @@
+#include "mpqdraft.h"
+
+#include <windows.h>
+#include <stdint.h>
+
+#include "mainpatch.h"
+
+#define PLUGIN_NAME "Ai debug plugin"
+#define PLUGIN_ID 0xc330daec
+
+MPQDraftPluginInterface thePluginInterface;
+
+#ifdef __GNUC__
+extern "C" void Initialize() __attribute__ ((visibility ("default")));
+extern "C" bool Metaplugin_Init() __attribute__ ((visibility ("default")));
+extern "C" BOOL APIENTRY DllMain(HINSTANCE hInstance, DWORD ul_reason_for_call, LPVOID lpReserved) __attribute__ ((visibility ("default")));
+extern "C" BOOL __stdcall GetMPQDraftPlugin(IMPQDraftPlugin **lppMPQDraftPlugin) __attribute__ ((visibility ("default")));
+#endif
+
+BOOL WINAPI MPQDraftPluginInterface::Identify(LPDWORD pluginID)
+{
+    *pluginID = PLUGIN_ID;
+    return TRUE;
+}
+
+BOOL WINAPI MPQDraftPluginInterface::GetPluginName(LPSTR pPluginName, DWORD namebufferlength)
+{
+    strncpy(pPluginName, PLUGIN_NAME, namebufferlength);
+    return TRUE;
+}
+
+BOOL WINAPI MPQDraftPluginInterface::CanPatchExecutable(LPCSTR exefilename)
+{
+    return TRUE;
+}
+
+BOOL WINAPI MPQDraftPluginInterface::Configure(HWND parentwindow)
+{
+    return TRUE;
+}
+
+BOOL WINAPI MPQDraftPluginInterface::ReadyForPatch()
+{
+    return TRUE;
+}
+
+BOOL WINAPI MPQDraftPluginInterface::GetModules(MPQDRAFTPLUGINMODULE* pluginmodules, LPDWORD nummodules)
+{
+    *nummodules = 0;
+    return TRUE;
+}
+
+BOOL WINAPI MPQDraftPluginInterface::TerminatePlugin()
+{
+	// Does not get ever called
+    return TRUE;
+}
+
+void MPQDraftPluginInterface::SetInstance(HINSTANCE hInst)
+{
+    hInstance = hInst;
+}
+
+extern "C" BOOL __stdcall GetMPQDraftPlugin(IMPQDraftPlugin **lppMPQDraftPlugin)
+{
+	*lppMPQDraftPlugin = &thePluginInterface;
+	return TRUE;
+}
+
+extern "C" void Initialize()
+{
+    InitialPatch();
+}
+
+BOOL WINAPI MPQDraftPluginInterface::InitializePlugin(IMPQDraftServer* server)
+{
+    Initialize();
+    return TRUE;
+}
+
+extern "C" bool Metaplugin_Init()
+{
+    Initialize();
+    return true;
+}
+
+// Read from bwlauncher.cpp
+HINSTANCE self_instance = NULL;
+
+extern "C" BOOL APIENTRY DllMain(HINSTANCE hInstance, DWORD ul_reason_for_call, LPVOID lpReserved)
+{
+    switch (ul_reason_for_call)
+    {
+        case DLL_PROCESS_ATTACH:
+            self_instance = hInstance;
+            DisableThreadLibraryCalls(hInstance);
+            thePluginInterface.SetInstance(hInstance);
+            break;
+        case DLL_THREAD_ATTACH:
+        case DLL_THREAD_DETACH:
+            break;
+        case DLL_PROCESS_DETACH:
+        break;
+    }
+    return TRUE;
+}
