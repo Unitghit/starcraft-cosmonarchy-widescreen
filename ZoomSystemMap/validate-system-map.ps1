@@ -12,7 +12,15 @@ if (-not (Test-Path -LiteralPath $installRoot -PathType Container)) {
 }
 $stableGptp = Join-Path $installRoot 'plugins\gptp.qdp'
 $stableGptpBackup = Join-Path $workspace 'ZoomIntegration\backups\gptp.pre_fixed_zoom.qdp'
+if (-not (Test-Path -LiteralPath $stableGptpBackup -PathType Leaf)) {
+    $adjacentBackup = Join-Path (Split-Path -Parent $workspace) `
+        'ZoomIntegration\backups\gptp.pre_fixed_zoom.qdp'
+    if (Test-Path -LiteralPath $adjacentBackup -PathType Leaf) {
+        $stableGptpBackup = $adjacentBackup
+    }
+}
 $geometryVerifier = Join-Path $workspace 'ZoomIntegration\verify_fixed_zoom.py'
+$menuScalerVerifier = Join-Path $workspace 'ZoomIntegration\verify_menu_scaler.py'
 $expectedGptpHash = 'CC6BF422B4DC6174EC6B002ACAE12A826D61CBF144661FE0C4F9E3687664BB99'
 
 $requiredDocuments = @(
@@ -36,6 +44,7 @@ $requiredDocuments = @(
     'diagnostics\tools-and-artifacts.md',
     'methodology\change-workflow.md',
     'methodology\subsystem-template.md',
+    'optimization\performance-audit.md',
     'testing\regression-checklist.md',
     'testing\resolution-matrix.md'
 )
@@ -141,6 +150,11 @@ foreach ($check in $requiredSourcePatterns) {
 & python $geometryVerifier
 if ($LASTEXITCODE -ne 0) {
     throw 'Resolution geometry verification failed'
+}
+
+& python $menuScalerVerifier
+if ($LASTEXITCODE -ne 0) {
+    throw 'Menu scaler verification failed'
 }
 
 $rendererInstall = Join-Path $installRoot 'plugins\aize_debug.qdp'

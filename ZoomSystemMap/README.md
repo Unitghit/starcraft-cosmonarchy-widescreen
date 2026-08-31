@@ -23,7 +23,9 @@ remains 640x480 with a nominal 640x400 game viewport.
    [reverse-engineering index](reverse-engineering/functions-and-globals.md).
 6. Run the applicable tests in
    [regression-checklist.md](testing/regression-checklist.md).
-7. Update this map with any new confirmed fact.
+7. For performance work, review the
+   [performance optimization audit](optimization/performance-audit.md).
+8. Update this map with any new confirmed fact.
 
 ## Map index
 
@@ -54,6 +56,8 @@ remains 640x480 with a nominal 640x400 game viewport.
   - [Subsystem research template](methodology/subsystem-template.md)
   - [Regression checklist](testing/regression-checklist.md)
   - [Resolution matrix](testing/resolution-matrix.md)
+- Optimization
+  - [Performance optimization audit](optimization/performance-audit.md)
 
 ## Current implementation anchors
 
@@ -62,7 +66,7 @@ remains 640x480 with a nominal 640x400 game viewport.
 | Shared resolution configuration | `ZoomSource\zoom_resolution.h` |
 | Presentation configuration | `ZoomPresentation` |
 | Renderer source | `ZoomSource\Cosmonarchy-aidebug-resolution` |
-| Renderer branch / baseline | `fixed-resolution-renderer` / `55f38f6` plus uncommitted zoom work |
+| Renderer branch / baseline | `development` / tested checkpoint `dd90143` |
 | GPTP reference source | `ZoomSource\Cosmonarchy-GPTP` |
 | Installed renderer | `Release\plugins\aize_debug.qdp` |
 | Installed stable GPTP | `Release\plugins\gptp.qdp` |

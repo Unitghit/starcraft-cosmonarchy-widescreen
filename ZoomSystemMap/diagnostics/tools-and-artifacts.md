@@ -17,6 +17,12 @@ Verify derived geometry:
 python ZoomIntegration\verify_fixed_zoom.py
 ```
 
+Verify optimized menu-scaler pixel equivalence:
+
+```powershell
+python ZoomIntegration\verify_menu_scaler.py
+```
+
 Validate the system map, stable plugin identity, source anchors, geometry, and
 installed renderer:
 

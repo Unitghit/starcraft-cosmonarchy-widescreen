@@ -67,6 +67,14 @@ namespace
     uint8_t native_game_text_frame[native_frame_size];
     uint8_t native_stock_frame[native_frame_size];
     uint8_t native_inner_frame[native_frame_size];
+    uint8_t cached_menu_source[native_frame_size];
+    bool cached_menu_frame_valid;
+    unsigned cached_menu_screen_width;
+    unsigned cached_menu_screen_height;
+    unsigned cached_menu_width;
+    unsigned cached_menu_height;
+    unsigned cached_menu_left;
+    unsigned cached_menu_top;
     bool recursive_stock_draw;
     unsigned stock_draw_depth;
     uint8_t saved_cursor_layer_draw;
@@ -541,12 +549,19 @@ namespace
         {
             return false;
         }
-        for (unsigned y = 0; y < resolution::screen_height; ++y)
+        if (pitch == static_cast<int>(resolution::screen_width))
         {
-            memcpy(surface + static_cast<size_t>(y) * pitch,
-                   fake_screenbuf_2 + static_cast<size_t>(y) *
-                       resolution::screen_width,
-                   resolution::screen_width);
+            memcpy(surface, fake_screenbuf_2, expanded_frame_size());
+        }
+        else
+        {
+            for (unsigned y = 0; y < resolution::screen_height; ++y)
+            {
+                memcpy(surface + static_cast<size_t>(y) * pitch,
+                       fake_screenbuf_2 + static_cast<size_t>(y) *
+                           resolution::screen_width,
+                       resolution::screen_width);
+            }
         }
         (*bw::SDrawUnlockSurface_Import)(0, surface, 0, 0);
         if (physical_pitch)
@@ -636,7 +651,8 @@ namespace
             layer.area.left = saved_placement_left[box];
             layer.area.top = saved_placement_top[box];
         }
-        memcpy(destination, native_inner_frame, native_frame_size);
+        if (destination)
+            memcpy(destination, native_inner_frame, native_frame_size);
 
         bw::draw_layers[5].Draw = saved_game_draw;
         for (int i = 0; i < 8; ++i)
@@ -1088,7 +1104,6 @@ namespace
 
     void ScaleNativeMenuToOutput(const uint8_t *source)
     {
-        memset(fake_screenbuf, 0, expanded_frame_size());
         const unsigned output_width =
             static_cast<unsigned>(resolution::menu_width);
         const unsigned output_height =
@@ -1097,6 +1112,48 @@ namespace
             static_cast<unsigned>(resolution::menu_left);
         const unsigned output_top =
             static_cast<unsigned>(resolution::menu_top);
+
+        const bool geometry_unchanged =
+            cached_menu_screen_width == resolution::screen_width &&
+            cached_menu_screen_height == resolution::screen_height &&
+            cached_menu_width == output_width &&
+            cached_menu_height == output_height &&
+            cached_menu_left == output_left && cached_menu_top == output_top;
+        if (cached_menu_frame_valid && geometry_unchanged &&
+            memcmp(source, cached_menu_source, native_frame_size) == 0)
+        {
+            return;
+        }
+
+        memcpy(cached_menu_source, source, native_frame_size);
+        cached_menu_screen_width = resolution::screen_width;
+        cached_menu_screen_height = resolution::screen_height;
+        cached_menu_width = output_width;
+        cached_menu_height = output_height;
+        cached_menu_left = output_left;
+        cached_menu_top = output_top;
+
+        memset(fake_screenbuf, 0, expanded_frame_size());
+
+        static uint16_t source_x_by_destination[
+            resolution::maximum_screen_width];
+        static unsigned mapped_output_width;
+        if (mapped_output_width != output_width)
+        {
+            for (unsigned destination_x = 0;
+                 destination_x < output_width; ++destination_x)
+            {
+                source_x_by_destination[destination_x] =
+                    static_cast<uint16_t>(destination_x *
+                        static_cast<unsigned>(resolution::native_width) /
+                        output_width);
+            }
+            mapped_output_width = output_width;
+        }
+
+        unsigned previous_source_y =
+            static_cast<unsigned>(resolution::native_height);
+        uint8_t *previous_destination_row = nullptr;
         for (unsigned destination_y = 0;
              destination_y < output_height; ++destination_y)
         {
@@ -1106,17 +1163,26 @@ namespace
             uint8_t *destination_row = fake_screenbuf +
                 static_cast<size_t>(output_top + destination_y) *
                     resolution::screen_width + output_left;
+            if (source_y == previous_source_y)
+            {
+                memcpy(destination_row, previous_destination_row,
+                       output_width);
+                previous_destination_row = destination_row;
+                continue;
+            }
+
             const uint8_t *source_row = source +
                 static_cast<size_t>(source_y) * resolution::native_width;
             for (unsigned destination_x = 0;
                  destination_x < output_width; ++destination_x)
             {
-                const unsigned source_x = destination_x *
-                    static_cast<unsigned>(resolution::native_width) /
-                    output_width;
-                destination_row[destination_x] = source_row[source_x];
+                destination_row[destination_x] =
+                    source_row[source_x_by_destination[destination_x]];
             }
+            previous_source_y = source_y;
+            previous_destination_row = destination_row;
         }
+        cached_menu_frame_valid = true;
     }
 
     void RenderNativeMenu(Surface *screen)
@@ -1183,8 +1249,6 @@ void AfterStockDrawScreen()
     int physical_pitch = 0;
     if (trace_first_call)
         TracePostRenderer("using private stock surface");
-    memcpy(native_present, native_stock_frame, native_frame_size);
-    memset(fake_screenbuf, 0, expanded_frame_size());
 
     const bool in_game = is_in_game() && bw::draw_layers[5].draw &&
         bw::draw_layers[5].Draw;
@@ -1195,6 +1259,8 @@ void AfterStockDrawScreen()
 
     if (in_game)
     {
+        cached_menu_frame_valid = false;
+        memset(fake_screenbuf, 0, expanded_frame_size());
         LogLayerTable("game");
         const uint32_t map_width =
             static_cast<uint32_t>(*bw::map_width_tiles) * 32;
@@ -1247,15 +1313,17 @@ void AfterStockDrawScreen()
                     static_cast<unsigned>(resolution::native_safe_game_height -
                         copy_height));
                 uint8_t *target = row == 0 && column == 0 ?
-                    native_game_reference : native_tile;
+                    native_game_reference : nullptr;
                 RunStockGameOnlyPass(actual_x, actual_y,
                                      camera_x, camera_y, target);
-                CopyTerrainTile(target, source_x, source_y,
+                const uint8_t *rendered_frame = target ? target :
+                    native_inner_frame;
+                CopyTerrainTile(rendered_frame, source_x, source_y,
                                 column * resolution::tile_width,
                                 row * resolution::tile_height,
                                 copy_width, copy_height);
                 CopyTerrainTileGutters(
-                    target, source_x, source_y,
+                    rendered_frame, source_x, source_y,
                     column * resolution::tile_width,
                     row * resolution::tile_height,
                     copy_width, visual_copy_height, camera_y, map_height);
@@ -1331,6 +1399,18 @@ void AfterStockDrawScreen()
             for (unsigned source_y = 0;
                  source_y < resolution::native_hud_top; ++source_y)
             {
+                const uint8_t *native_ui_row = native_ui_frame +
+                    static_cast<size_t>(source_y) *
+                        resolution::native_width;
+                const uint8_t *native_game_row = native_game_reference +
+                    static_cast<size_t>(source_y) *
+                        resolution::native_width;
+                if (source_y < resolution::native_hud_protrusion_top &&
+                    memcmp(native_ui_row, native_game_row,
+                           resolution::native_width) == 0)
+                {
+                    continue;
+                }
                 for (unsigned source_x = 0;
                      source_x < resolution::native_width; ++source_x)
                 {
@@ -1390,6 +1470,24 @@ void AfterStockDrawScreen()
         {
             const unsigned destination_y =
                 hud_vertical_offset + source_y;
+            const bool popup_intersects_row = popup.valid &&
+                static_cast<int>(source_y) >= popup.top &&
+                static_cast<int>(source_y) < popup.bottom &&
+                popup.left < static_cast<int>(resolution::native_width) &&
+                popup.right > 0;
+            if (source_y >= resolution::native_game_height &&
+                !popup_intersects_row)
+            {
+                memcpy(fake_screenbuf +
+                           static_cast<size_t>(destination_y) *
+                               resolution::screen_width +
+                           resolution::hud_left,
+                       native_ui_frame +
+                           static_cast<size_t>(source_y) *
+                               resolution::native_width,
+                       resolution::native_width);
+                continue;
+            }
             for (unsigned source_x = 0;
                  source_x < resolution::native_width; ++source_x)
             {

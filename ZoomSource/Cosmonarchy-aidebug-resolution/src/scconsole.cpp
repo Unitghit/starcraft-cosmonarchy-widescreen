@@ -105,6 +105,11 @@ for (int i = 0; i < Limits::Players; i++) {
 draw_coords = false;
 draw_range = false;
 draw_resource_areas = false;
+draw_deaths = false;
+draw_bullets = false;
+for (int i = 0; i < Limits::Players; i++) {
+    show_deaths[i] = 0;
+}
 
 AddCommand("gsw", &ScConsole::Gsw);
 AddCommand("vis", &ScConsole::Vision);
@@ -1312,6 +1317,16 @@ void ScConsole::DrawGrids(uint8_t *framebuf, xuint w, yuint h) {
 }
 
 void ScConsole::DrawDebugInfo(uint8_t *framebuf, xuint w, yuint h) {
+    const bool has_visual_overlay =
+        show_frame || draw_locations || draw_crects || !grids.empty() ||
+        draw_ai_towns || draw_deaths || draw_ai_unit_homes || draw_ai_guards ||
+        draw_resource_areas || draw_orders != OrderDrawMode::None || draw_coords ||
+        draw_range || draw_region_data;
+    if (!has_visual_overlay) {
+        UpdateFastForwardProgress();
+        return;
+    }
+
     ConstructInfoLines();
     static uint8_t buffer[resolution::maximum_frame_size];
     static uint8_t text_buf[resolution::maximum_frame_size];
@@ -1348,7 +1363,8 @@ void ScConsole::DrawDebugInfo(uint8_t *framebuf, xuint w, yuint h) {
         }
     }
     for (unsigned y = 0; y < resolution::game_height; y++) {
-        for (unsigned x = 0; x < resolution::game_width; x += 4) {
+        unsigned x = 0;
+        for (; x + 4 <= resolution::game_width; x += 4) {
             if (*(uint32_t*)(buffer + y * resolution::screen_width + x) == 0) {
                 continue;
             }
@@ -1363,6 +1379,13 @@ void ScConsole::DrawDebugInfo(uint8_t *framebuf, xuint w, yuint h) {
             }
             if (buffer[y * resolution::screen_width + x + 3] != 0 && !bw::IsOutsideGameScreen(x + 3, y)) {
                 framebuf[y * w + x + 3] = buffer[y * resolution::screen_width + x + 3];
+            }
+        }
+        for (; x < resolution::game_width; ++x) {
+            const uint8_t color =
+                buffer[y * resolution::screen_width + x];
+            if (color != 0 && !bw::IsOutsideGameScreen(x, y)) {
+                framebuf[y * w + x] = color;
             }
         }
     }
@@ -2885,12 +2908,13 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
             trace_engine_before_x, trace_engine_before_y,
             translated_hud_event);
     }
+    // Window-state messages cover client-size correction. Avoid querying the
+    // unchanged client rectangle for every mouse packet.
     switch (msg) {
         case WM_SIZE:
         case WM_WINDOWPOSCHANGED:
         case WM_ACTIVATE:
         case WM_PAINT:
-        case WM_MOUSEMOVE:
             presentation::EnsureClient(hwnd);
             break;
     }
