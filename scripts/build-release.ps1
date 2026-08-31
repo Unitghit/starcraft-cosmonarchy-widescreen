@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.4.0'
+    [string]$Version = '0.4.1'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,9 +17,42 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Universal renderer build failed'
 }
 
+$diagnosticsHeader = Join-Path $repository `
+    'ZoomSource\Cosmonarchy-aidebug-resolution\src\runtime_diagnostics.h'
+$diagnosticsSource = Get-Content -LiteralPath $diagnosticsHeader -Raw
+if ($diagnosticsSource -notmatch `
+        'constexpr\s+bool\s+Enabled\s*\(\s*\)\s*\{\s*return\s+false\s*;') {
+    throw 'Runtime diagnostics are not compile-time disabled'
+}
+
+$rendererPayload = Join-Path $configurator `
+    'Payloads\1280x720\aize_debug.qdp'
+$rendererText = [System.Text.Encoding]::ASCII.GetString(
+    [System.IO.File]::ReadAllBytes($rendererPayload))
+$diagnosticMarkers = @(
+    'fixed_zoom_renderer.log',
+    'fixed_zoom_input.log',
+    'fixed_zoom_tooltip.log',
+    'fixed_zoom_cursor_hover.log',
+    'fixed_zoom_first_frame.raw',
+    'fixed_zoom_first_frame.txt',
+    'fixed_zoom_presentation.log'
+)
+foreach ($marker in $diagnosticMarkers) {
+    if ($rendererText.Contains($marker)) {
+        throw "Diagnostic marker remains in renderer payload: $marker"
+    }
+}
+Write-Output 'Release diagnostic audit: PASS'
+
 & python (Join-Path $repository 'ZoomIntegration\verify_fixed_zoom.py')
 if ($LASTEXITCODE -ne 0) {
     throw 'Offline resolution geometry verification failed'
+}
+
+& python (Join-Path $repository 'ZoomIntegration\verify_menu_scaler.py')
+if ($LASTEXITCODE -ne 0) {
+    throw 'Menu scaler verification failed'
 }
 
 New-Item -ItemType Directory -Path $output -Force | Out-Null

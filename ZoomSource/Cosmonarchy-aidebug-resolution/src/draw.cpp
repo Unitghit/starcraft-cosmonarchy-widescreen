@@ -86,44 +86,119 @@ namespace
 
     uint32_t fnv1a(const uint8_t *data, size_t size);
 
-    typedef void (__cdecl *DrawExpandedMapGraphicsProc)(
-        uint8_t *, uint16_t, uint16_t);
+    typedef void (__thiscall *DrawGptpGraphicProc)(void *, int);
+
+    struct GptpMapGraphicsState
+    {
+        DrawGptpGraphicProc draw = nullptr;
+        uint8_t *module = nullptr;
+        bool resolved = false;
+    };
+
+    GptpMapGraphicsState gptp_map_graphics;
+
+    bool ResolveGptpMapGraphics()
+    {
+        if (gptp_map_graphics.resolved)
+            return gptp_map_graphics.draw != nullptr;
+        gptp_map_graphics.resolved = true;
+
+        HMODULE module = GetModuleHandleA("gptp.qdp");
+        if (!module)
+            module = GetModuleHandleA("CM-GPTP-Release.qdp");
+        if (!module)
+            return false;
+
+        uint8_t *base = reinterpret_cast<uint8_t *>(module);
+        // Stable GPTP CC6BF422... has its layer-5 wrapper at RVA 0xD5620
+        // and its 40-byte graphic draw method at RVA 0xED090. Validate both
+        // entry points before touching the internal graphic vectors.
+        const uint8_t wrapper_signature[] =
+            { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF8, 0x51, 0x80 };
+        const uint8_t draw_signature[] =
+            { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF8, 0x83, 0xEC, 0x2C };
+        if (memcmp(base + 0xD5620, wrapper_signature,
+                   sizeof(wrapper_signature)) != 0 ||
+            memcmp(base + 0xED090, draw_signature,
+                   sizeof(draw_signature)) != 0)
+        {
+            return false;
+        }
+
+        gptp_map_graphics.module = base;
+        gptp_map_graphics.draw =
+            reinterpret_cast<DrawGptpGraphicProc>(base + 0xED090);
+        return true;
+    }
+
+    bool ValidGptpGraphicVector(uint8_t *begin, uint8_t *end)
+    {
+        if (begin == end)
+            return true;
+        if (!begin || !end)
+            return false;
+        const uintptr_t begin_address = reinterpret_cast<uintptr_t>(begin);
+        const uintptr_t end_address = reinterpret_cast<uintptr_t>(end);
+        if (end_address < begin_address)
+            return false;
+        const size_t bytes = static_cast<size_t>(
+            end_address - begin_address);
+        return bytes % 0x28 == 0 && bytes <= 0x28 * 4096;
+    }
 
     void DrawGptpMapGraphics(uint8_t *destination, uint16_t width,
                              uint16_t height)
     {
-        static DrawExpandedMapGraphicsProc proc;
-        static bool logged;
-        if (!proc)
-        {
-            HMODULE module = GetModuleHandleA("gptp.qdp");
-            if (!module)
-                module = GetModuleHandleA("CM-GPTP-Release.qdp");
-            if (module)
-            {
-                proc = reinterpret_cast<DrawExpandedMapGraphicsProc>(
-                    GetProcAddress(module, "DrawExpandedMapGraphics"));
-            }
-        }
-        if (!logged)
-        {
-            FILE *log = fopen("fixed_zoom_renderer.log", "a");
-            if (log)
-            {
-                fprintf(log, "GPTP expanded map graphics export=%p\n", proc);
-                fclose(log);
-            }
-            logged = true;
-        }
-        if (proc)
-            proc(destination, width, height);
-    }
+        if (!destination || !ResolveGptpMapGraphics())
+            return;
 
-    void DrawExpandedGptpMapGraphics(uint8_t *destination)
-    {
-        DrawGptpMapGraphics(destination,
-            static_cast<uint16_t>(resolution::game_width),
-            static_cast<uint16_t>(resolution::game_height));
+        // The three vectors are traversed by GPTP's layer-5 wrapper with
+        // draw variants 0, 1, and 1. Graphic field +0x04 is its coordinate
+        // mode. Mode 1 subtracts the live camera origin and is ON_MAP.
+        const uintptr_t vector_offsets[][3] =
+        {
+            { 0x25A1F0, 0x25A1F4, 0 },
+            { 0x25A208, 0x25A20C, 1 },
+            { 0x25A214, 0x25A218, 1 },
+        };
+
+        uint8_t *frame_state =
+            reinterpret_cast<uint8_t *>(&bw::draw_layers[0]) +
+            sizeof(DrawLayer) * 8;
+        uint16_t saved_width = 0;
+        uint16_t saved_height = 0;
+        uint8_t *saved_pixels = nullptr;
+        memcpy(&saved_width, frame_state, sizeof(saved_width));
+        memcpy(&saved_height, frame_state + 2, sizeof(saved_height));
+        memcpy(&saved_pixels, frame_state + 4, sizeof(saved_pixels));
+        memcpy(frame_state, &width, sizeof(width));
+        memcpy(frame_state + 2, &height, sizeof(height));
+        memcpy(frame_state + 4, &destination, sizeof(destination));
+
+        for (const auto &vector : vector_offsets)
+        {
+            uint8_t *begin = nullptr;
+            uint8_t *end = nullptr;
+            memcpy(&begin, gptp_map_graphics.module + vector[0],
+                   sizeof(begin));
+            memcpy(&end, gptp_map_graphics.module + vector[1], sizeof(end));
+            if (!ValidGptpGraphicVector(begin, end))
+                continue;
+
+            for (uint8_t *graphic = begin; graphic < end; graphic += 0x28)
+            {
+                uint32_t coordinate_mode = 0;
+                memcpy(&coordinate_mode, graphic + 4,
+                       sizeof(coordinate_mode));
+                if (coordinate_mode == 1)
+                    gptp_map_graphics.draw(graphic,
+                        static_cast<int>(vector[2]));
+            }
+        }
+
+        memcpy(frame_state, &saved_width, sizeof(saved_width));
+        memcpy(frame_state + 2, &saved_height, sizeof(saved_height));
+        memcpy(frame_state + 4, &saved_pixels, sizeof(saved_pixels));
     }
 
     struct PopupBounds
@@ -576,7 +651,8 @@ namespace
     void RunStockGameOnlyPass(uint32_t camera_x, uint32_t camera_y,
                               uint32_t base_camera_x,
                               uint32_t base_camera_y,
-                              uint8_t *destination)
+                              uint8_t *destination,
+                              bool draw_map_graphics = true)
     {
         uint8_t saved_draw[8];
         uint8_t saved_flags[8];
@@ -651,9 +727,12 @@ namespace
         recursive_stock_draw = true;
         reinterpret_cast<void (__cdecl *)()>(0x0041E280)();
         recursive_stock_draw = false;
-        DrawGptpMapGraphics(native_inner_frame,
-            static_cast<uint16_t>(resolution::native_width),
-            static_cast<uint16_t>(resolution::native_height));
+        if (draw_map_graphics)
+        {
+            DrawGptpMapGraphics(native_inner_frame,
+                static_cast<uint16_t>(resolution::native_width),
+                static_cast<uint16_t>(resolution::native_height));
+        }
         for (unsigned box = 0; box < 2; ++box)
         {
             DrawLayer &layer = bw::draw_layers[3 + box];
@@ -674,7 +753,8 @@ namespace
     void RunStockPopupPass(uint32_t camera_x, uint32_t camera_y,
                            uint32_t base_camera_x,
                            uint32_t base_camera_y,
-                           uint8_t *destination)
+                           uint8_t *destination,
+                           bool draw_map_graphics = true)
     {
         uint8_t saved_draw[8];
         uint8_t saved_flags[8];
@@ -693,6 +773,9 @@ namespace
         }
         bw::draw_layers[2].draw = 1;
         bw::draw_layers[5].draw = 1;
+        auto saved_game_draw = bw::draw_layers[5].Draw;
+        bw::draw_layers[5].Draw =
+            reinterpret_cast<decltype(bw::draw_layers[5].Draw)>(0x004BD580);
 
         const uint32_t saved_screen_y_max = *bw::screen_y_max;
         const uint32_t map_height =
@@ -735,6 +818,12 @@ namespace
         recursive_stock_draw = true;
         reinterpret_cast<void (__cdecl *)()>(0x0041E280)();
         recursive_stock_draw = false;
+        if (draw_map_graphics)
+        {
+            DrawGptpMapGraphics(native_inner_frame,
+                static_cast<uint16_t>(resolution::native_width),
+                static_cast<uint16_t>(resolution::native_height));
+        }
         for (unsigned box = 0; box < 2; ++box)
         {
             DrawLayer &layer = bw::draw_layers[3 + box];
@@ -743,6 +832,7 @@ namespace
         }
         memcpy(destination, native_inner_frame, native_frame_size);
 
+        bw::draw_layers[5].Draw = saved_game_draw;
         for (int i = 0; i < 8; ++i)
         {
             bw::draw_layers[i].draw = saved_draw[i];
@@ -1342,16 +1432,21 @@ void AfterStockDrawScreen()
         // middle-mouse panning. Comparing that stale surface with the fully
         // redrawn first world tile can misclassify old map pixels as UI and
         // stamp ghost map bands into the centered top and bottom UI regions.
-        // Generate a fresh UI pass at the same camera as the fresh game-only
-        // reference for the duration of the gesture. Normal rendering keeps
-        // the existing path and pays no additional pass cost.
+        // Generate a matched game-only and UI pair at the same camera for the
+        // duration of the gesture. Map graphics are omitted from both private
+        // comparison frames so rally lines cannot be mistaken for HUD pixels.
+        // They remain enabled in the expanded gameplay tiles rendered above.
+        // Normal rendering keeps the existing path and pays no additional
+        // pass cost.
         const bool middle_pan_active =
             (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
         const uint8_t *native_ui_frame = native_stock_frame;
         if (middle_pan_active)
         {
+            RunStockGameOnlyPass(camera_x, camera_y, camera_x, camera_y,
+                                 native_game_reference, false);
             RunStockPopupPass(camera_x, camera_y, camera_x, camera_y,
-                              native_current_ui_frame);
+                              native_current_ui_frame, false);
             native_ui_frame = native_current_ui_frame;
         }
 
@@ -1599,8 +1694,6 @@ void AfterStockDrawScreen()
     }
 
     memcpy(fake_screenbuf_2, fake_screenbuf, expanded_frame_size());
-    if (in_game)
-        DrawExpandedGptpMapGraphics(fake_screenbuf_2);
     if (trace_first_call)
         TracePostRenderer("running draw hooks");
     for (drawhook &hook : draw_hooks)
@@ -1784,8 +1877,6 @@ void DrawScreen()
     *bw::current_canvas = nullptr;
 
     memcpy(fake_screenbuf_2, fake_screenbuf, expanded_frame_size());
-    if (in_game)
-        DrawExpandedGptpMapGraphics(fake_screenbuf_2);
     for (drawhook &hook : draw_hooks)
     {
         (*hook.func)(fake_screenbuf_2, resolution::screen_width, resolution::screen_height);

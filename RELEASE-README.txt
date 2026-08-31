@@ -1,4 +1,4 @@
-StarCraft Cosmonarchy Widescreen 0.4.0
+StarCraft Cosmonarchy Widescreen 0.4.1
 ======================================
 
 INSTALL

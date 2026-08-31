@@ -12,7 +12,7 @@ Addresses in the StarCraft tables are absolute addresses for the supported
 | `0x0041E3FD` | DrawScreen post hook site | Common post-composition path |
 | `0x0041CB50` | Native dialog/UI layer update | Live layer-2 function |
 | `0x004810F0` | Native context layer update | Live layer-1 function |
-| `0x004BD580` | Raw native world draw | Used privately with an explicit GPTP `ON_MAP` follow-up |
+| `0x004BD580` | Raw native world draw | Used privately with a filtered stable-GPTP `ON_MAP` replay |
 | `0x004BD3A0` | Rebuild visible-sprite rows | Behavioral name, confirmed necessary per camera |
 | `0x004BDFA0` | Cursor layer update | Live layer-0 function |
 | `0x004BD614` | Screen-space game-text call | Replaced with no-op during native/private draw |

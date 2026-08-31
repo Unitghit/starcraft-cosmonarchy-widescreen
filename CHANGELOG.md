@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1, rally-point hotfix
+
+- Restored accurate rally-point lines across the expanded battlefield.
+- Fixed duplicate rally lines over the HUD during middle-mouse panning.
+
 ## 0.4.0
 
 - Added live battlefield rendering beside the bottom HUD.

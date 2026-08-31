@@ -35,11 +35,20 @@ centered 640-pixel HUD. Tile height is derived from the output height while
 tile count remains derived from the logical battlefield, so this adds no
 private world passes. The HUD is then composed over the center of that strip.
 
-Private layer 5 calls StarCraft's raw world draw at `0x004BD580`, then invokes
-GPTP's `DrawExpandedMapGraphics` export against the same 640x480 pass buffer.
-This retains queued `ON_MAP` graphics such as rally lines while excluding
-GPTP `ON_SCREEN`, `ON_MOUSE`, and stat-res graphics. Those screen-space
-graphics otherwise repeat once per camera tile at high resolutions.
+Private layer 5 calls StarCraft's raw world draw at `0x004BD580`, then walks
+stable GPTP's three graphic vectors and invokes its validated graphic draw
+routine only for coordinate mode `1` (`ON_MAP`). The stable release does not
+export `DrawExpandedMapGraphics`; treating that symbol as available silently
+removed private-pass rally graphics. The filtered replay retains rally lines
+at each pass camera while excluding `ON_SCREEN`, `ON_MOUSE`, and stat-res
+graphics that would otherwise repeat once per camera tile.
+
+Middle-mouse panning uses a fresh matched world and UI comparison pair because
+the stock backing surface is only partially refreshed during that gesture. The
+comparison pair deliberately omits GPTP map graphics. Rally lines remain in the
+already-rendered gameplay tiles, while their absence from both comparison
+frames prevents the HUD extraction step from copying a duplicate over the
+bottom interface.
 
 ## Placement layers
 

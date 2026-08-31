@@ -26,7 +26,7 @@ Status here refers to the current 1280x720 build unless noted otherwise.
 | GPTP extended-upgrade match clear | Stabilized, confirmed | User passed match start after runtime correction of source-confirmed -46 bulk-clear pointer bias |
 | Race HUD protrusion/corner art | Expanded, confirmed for Protoss and Zerg | y=293..313 follows bottom HUD; Zerg's measured 14-pixel cap at x=0..5/y=290..292 also follows it; x=0..22 is kept for Zerg/Protoss and discarded for Terran |
 | Aspect-fitted front-end menus | Installed, interactive user test pending | Native 640x480 frame scales into derived centered 4:3 rectangle with inverse mouse mapping |
-| Rally-point line | Expanded, confirmed | GPTP layer-5 wrapper retained in every pass |
+| Rally-point line | Expanded, confirmed | Stable-GPTP coordinate mode `1` replayed in every private pass |
 | Building-placement ghost | Expanded, confirmed | User test after GPTP bound and layer-position fixes |
 | Gameplay hover cursor states | Expanded, runtime-confirmed | GPTP selector emits ally/neutral states beyond x=639 and y=399; visual regression pending |
 | Invisible native tooltip hitboxes | Expanded, confirmed | Eight verified lookup filters cover command card, minimap buttons, and status-panel armor/attack descriptions; user confirmed obsolete 4:3 descriptions are gone |

@@ -35,8 +35,10 @@ native layer **width** and **height**, not absolute coordinates.
 
 The outer native frame retains GPTP's layer-5 wrapper. Private world passes
 temporarily call raw StarCraft world rendering and then explicitly request
-only GPTP `ON_MAP` graphics through `DrawExpandedMapGraphics`. This preserves
-rally lines without stamping screen-space stat-res graphics into every tile.
+only GPTP coordinate mode `1` graphics through the stable build's validated
+internal draw routine. This preserves rally lines without stamping
+screen-space stat-res graphics into every tile. The stable GPTP QDP does not
+export `DrawExpandedMapGraphics`.
 
 Layer 1 is not the drag-selection rectangle. Its parameter at `0x00655C40`
 is a **confirmed 160x480 Surface**; the prepared tooltip itself occupies the
@@ -81,7 +83,7 @@ native draw parameter/clip. It clips negative `left/top` values and uses fixed
 - Save and restore any temporarily changed layer state inside the same pass.
 - Force refresh flags when a private camera needs a complete redraw.
 - Private passes may temporarily use raw layer 5 only when GPTP `ON_MAP`
-  graphics are drawn explicitly afterward and the installed pointer is
+  graphics are replayed explicitly afterward and the installed pointer is
   restored before leaving the pass.
 
 ## Diagnostic representation
