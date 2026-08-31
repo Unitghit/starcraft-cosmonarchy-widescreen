@@ -1,8 +1,12 @@
-# StarCraft Cosmonarchy Widescreen 0.3.1
+# StarCraft Cosmonarchy Widescreen 0.4.0
 
-Performance hotfix.
+- Added live battlefield rendering beside the bottom HUD.
+- Added centered 4:3 and screen-edge layouts for the top UI.
+- Fixed several HUD tooltip, highlight, and interaction issues.
+- Fixed unit orders outside the original 4:3 area at high resolutions.
+- Fixed duplicated team-color graphics at 1080p and above.
+- Optimized rendering for faster menus and improved performance.
+- Changed the default presentation scale to 1x.
 
-- Removed diagnostic tracing accidentally left active in v0.3.0.
-- Restored Cosmonarchy performance settings and unrestricted CPU affinity.
-
-Gameplay and widescreen behavior are unchanged.
+Secondary-monitor targeting is not included in this release. Use the primary
+display.
