@@ -11,6 +11,21 @@ internal sealed class ConfigurationService
     private const string ManifestResource =
         "CosmonarchyWidescreen.Payload.compatibility-manifest.json";
 
+    private static readonly string[] OwnedDdrawKeys =
+    {
+        "width", "height", "fullscreen", "windowed", "maintas", "boxing",
+        "maxfps", "adjmouse", "shader", "d3d9_filter", "posX", "posY",
+        "border", "resizable", "savesettings", "maxgameticks",
+        "nonexclusive", "singlecpu",
+    };
+
+    private static readonly JsonSerializerOptions StateJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+    };
+
     private readonly Dictionary<string, byte[]> rendererPayloads =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> rendererPayloadHashes =
@@ -162,15 +177,21 @@ internal sealed class ConfigurationService
         var originalDdraw = File.ReadAllBytes(Paths.DdrawPath);
         var originalConfig = File.Exists(Paths.ViewportConfigPath) ?
             File.ReadAllBytes(Paths.ViewportConfigPath) : null;
+        var originalState = File.Exists(Paths.StatePath) ?
+            File.ReadAllBytes(Paths.StatePath) : null;
 
         try
         {
+            var ddrawValues = BuildDdrawValues(settings);
+            var ddrawSource = Encoding.UTF8.GetString(originalDdraw);
+            var ownedSettings = BuildOwnershipForApply(ddrawSource, ddrawValues);
             AtomicWrite(Paths.RendererPath, rendererPayload);
             AtomicWrite(Paths.DdrawPath,
-                Encoding.UTF8.GetBytes(BuildDdraw(settings)));
+                Encoding.UTF8.GetBytes(
+                    IniDocument.UpdateSection(ddrawSource, "ddraw", ddrawValues)));
             AtomicWrite(Paths.ViewportConfigPath,
                 new UTF8Encoding(false).GetBytes(BuildViewportConfig(settings)));
-            WriteState(settings);
+            WriteState(settings, ownedSettings);
 
             if (!HashFile(Paths.RendererPath).Equals(rendererPayloadHash,
                     StringComparison.OrdinalIgnoreCase))
@@ -187,6 +208,7 @@ internal sealed class ConfigurationService
                 File.Delete(Paths.ViewportConfigPath);
             else
                 AtomicWrite(Paths.ViewportConfigPath, originalConfig);
+            RestoreOptionalFile(Paths.StatePath, originalState);
             throw;
         }
     }
@@ -195,9 +217,8 @@ internal sealed class ConfigurationService
     {
         if (IsGameRunning())
             throw new InvalidOperationException("Close Cosmonarchy before restoring files.");
-        if (!File.Exists(Paths.RendererBackupPath) ||
-            !File.Exists(Paths.DdrawBackupPath))
-            throw new InvalidOperationException("No complete original backup is available.");
+        if (!File.Exists(Paths.RendererBackupPath))
+            throw new InvalidOperationException("No original renderer backup is available.");
         if (!HashFile(Paths.RendererBackupPath).Equals(
                 manifest.OriginalRendererSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("The original renderer backup failed validation.");
@@ -209,12 +230,15 @@ internal sealed class ConfigurationService
         var originalState = File.Exists(Paths.StatePath) ?
             File.ReadAllBytes(Paths.StatePath) : null;
         var rendererBackup = File.ReadAllBytes(Paths.RendererBackupPath);
-        var ddrawBackup = File.ReadAllBytes(Paths.DdrawBackupPath);
+        var currentDdrawText = Encoding.UTF8.GetString(originalDdraw);
+        var ownedSettings = ReadOwnedSettingsForRestore(currentDdrawText);
+        var restoredDdrawText = IniDocument.RestoreOwnedSection(
+            currentDdrawText, "ddraw", ownedSettings);
 
         try
         {
             AtomicWrite(Paths.RendererPath, rendererBackup);
-            AtomicWrite(Paths.DdrawPath, ddrawBackup);
+            AtomicWrite(Paths.DdrawPath, Encoding.UTF8.GetBytes(restoredDdrawText));
             DeleteIfPresent(Paths.ViewportConfigPath);
             DeleteIfPresent(Paths.StatePath);
 
@@ -222,7 +246,8 @@ internal sealed class ConfigurationService
                     manifest.OriginalRendererSha256,
                     StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Restored renderer verification failed.");
-            if (!HashFile(Paths.DdrawPath).Equals(Hash(ddrawBackup),
+            if (!HashFile(Paths.DdrawPath).Equals(
+                    Hash(Encoding.UTF8.GetBytes(restoredDdrawText)),
                     StringComparison.OrdinalIgnoreCase))
                 throw new IOException("Restored ddraw settings verification failed.");
             if (File.Exists(Paths.ViewportConfigPath) || File.Exists(Paths.StatePath))
@@ -274,15 +299,14 @@ internal sealed class ConfigurationService
             File.Copy(Paths.DdrawPath, Paths.DdrawBackupPath, false);
     }
 
-    private string BuildDdraw(ViewportSettings settings)
+    private Dictionary<string, string> BuildDdrawValues(ViewportSettings settings)
     {
-        var source = File.ReadAllText(Paths.DdrawPath);
         var fullscreen = settings.WindowMode != WindowMode.Windowed;
         var windowed = settings.WindowMode != WindowMode.ExclusiveFullscreen;
         var border = settings.WindowMode == WindowMode.Windowed;
         var position = GetWindowPosition(settings);
         var nearest = settings.Filter == ScalingFilter.NearestNeighbor;
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["width"] = settings.OutputWidth.ToString(),
             ["height"] = settings.OutputHeight.ToString(),
@@ -303,8 +327,158 @@ internal sealed class ConfigurationService
             ["nonexclusive"] = "false",
             ["singlecpu"] = "false",
         };
-        return IniDocument.UpdateSection(source, "ddraw", values);
     }
+
+    private Dictionary<string, DdrawOwnedSettingState> BuildOwnershipForApply(
+        string currentDdraw,
+        IReadOnlyDictionary<string, string> appliedValues)
+    {
+        var current = IniDocument.SnapshotSection(
+            currentDdraw, "ddraw", OwnedDdrawKeys);
+        var previousState = ReadInstallationState();
+        var previous = previousState?.SchemaVersion == 2 ?
+            new Dictionary<string, DdrawOwnedSettingState>(
+                previousState.DdrawOwnedSettings,
+                StringComparer.OrdinalIgnoreCase) :
+            BuildLegacyOwnedSettings();
+        var result = new Dictionary<string, DdrawOwnedSettingState>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var pair in appliedValues)
+        {
+            var currentValue = current[pair.Key];
+            if (previous.TryGetValue(pair.Key, out var existing) &&
+                ValuesEqual(currentValue, existing.AppliedValue))
+            {
+                result[pair.Key] = new DdrawOwnedSettingState
+                {
+                    OriginalPresent = existing.OriginalPresent,
+                    OriginalValue = existing.OriginalValue,
+                    AppliedValue = pair.Value,
+                };
+                continue;
+            }
+
+            // If this setting changed after our last Save, treat the current
+            // value as user-owned before applying the new GUI selection.
+            result[pair.Key] = new DdrawOwnedSettingState
+            {
+                OriginalPresent = currentValue.Present,
+                OriginalValue = currentValue.Value,
+                AppliedValue = pair.Value,
+            };
+        }
+        return result;
+    }
+
+    private Dictionary<string, DdrawOwnedSettingState> ReadOwnedSettingsForRestore(
+        string currentDdraw)
+    {
+        var state = ReadInstallationState();
+        if (state?.SchemaVersion == 2 &&
+            state.DdrawOwnedSettings is { Count: > 0 })
+        {
+            return new Dictionary<string, DdrawOwnedSettingState>(
+                state.DdrawOwnedSettings,
+                StringComparer.OrdinalIgnoreCase);
+        }
+        return BuildLegacyOwnedSettings();
+    }
+
+    private Dictionary<string, DdrawOwnedSettingState> BuildLegacyOwnedSettings()
+    {
+        var result = new Dictionary<string, DdrawOwnedSettingState>(
+            StringComparer.OrdinalIgnoreCase);
+        if (!File.Exists(Paths.DdrawBackupPath))
+            return result;
+
+        var backup = IniDocument.SnapshotSection(
+            File.ReadAllText(Paths.DdrawBackupPath), "ddraw", OwnedDdrawKeys);
+        var expectedApplied = BuildLegacyAppliedValues();
+        foreach (var pair in expectedApplied)
+        {
+            var original = backup[pair.Key];
+            result[pair.Key] = new DdrawOwnedSettingState
+            {
+                OriginalPresent = original.Present,
+                OriginalValue = original.Value,
+                AppliedValue = pair.Value,
+            };
+        }
+        return result;
+    }
+
+    private Dictionary<string, string> BuildLegacyAppliedValues()
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var presentation = ReadSavedPresentation();
+        if (!presentation.TryGetValue("output_width", out var width) ||
+            !presentation.TryGetValue("output_height", out var height) ||
+            !presentation.TryGetValue("window_mode", out var windowMode) ||
+            !presentation.TryGetValue("filter", out var filter) ||
+            !presentation.TryGetValue("preserve_aspect_ratio", out var preserve))
+            return result;
+
+        var isWindowed = windowMode.Equals("windowed", StringComparison.OrdinalIgnoreCase);
+        var isExclusive = windowMode.Equals(
+            "exclusive_fullscreen", StringComparison.OrdinalIgnoreCase);
+        var nearest = filter.Equals("nearest", StringComparison.OrdinalIgnoreCase);
+        result["width"] = width;
+        result["height"] = height;
+        result["fullscreen"] = (!isWindowed).ToString().ToLowerInvariant();
+        result["windowed"] = (!isExclusive).ToString().ToLowerInvariant();
+        result["maintas"] = preserve.ToLowerInvariant();
+        result["boxing"] = "false";
+        result["maxfps"] = "333";
+        result["adjmouse"] = "true";
+        result["shader"] = nearest ? "Shaders\\nearest-neighbor.glsl" : "Bilinear";
+        result["d3d9_filter"] = nearest ? "0" : "1";
+        result["border"] = isWindowed.ToString().ToLowerInvariant();
+        result["resizable"] = isWindowed.ToString().ToLowerInvariant();
+        result["savesettings"] = "0";
+        result["maxgameticks"] = "-1";
+        result["nonexclusive"] = "false";
+        result["singlecpu"] = "false";
+
+        if (int.TryParse(width, out var outputWidth) &&
+            int.TryParse(height, out var outputHeight) &&
+            presentation.TryGetValue("display_device", out var deviceName))
+        {
+            var screen = Screen.AllScreens.FirstOrDefault(candidate =>
+                candidate.DeviceName.Equals(deviceName, StringComparison.OrdinalIgnoreCase));
+            if (screen is not null)
+            {
+                var position = isWindowed ? new Point(
+                    screen.WorkingArea.Left + (screen.WorkingArea.Width - outputWidth) / 2,
+                    screen.WorkingArea.Top + (screen.WorkingArea.Height - outputHeight) / 2) :
+                    screen.Bounds.Location;
+                result["posX"] = position.X.ToString();
+                result["posY"] = position.Y.ToString();
+            }
+        }
+        return result;
+    }
+
+    private InstallationState? ReadInstallationState()
+    {
+        if (!File.Exists(Paths.StatePath))
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<InstallationState>(
+                File.ReadAllText(Paths.StatePath), StateJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static bool ValuesEqual(IniValueSnapshot current, string appliedValue) =>
+        current.Present && string.Equals(
+            current.Value?.Trim(),
+            appliedValue.Trim(),
+            StringComparison.OrdinalIgnoreCase);
 
     private static Point GetWindowPosition(ViewportSettings settings)
     {
@@ -356,22 +530,25 @@ internal sealed class ConfigurationService
             """ + Environment.NewLine;
     }
 
-    private void WriteState(ViewportSettings settings)
+    private void WriteState(
+        ViewportSettings settings,
+        Dictionary<string, DdrawOwnedSettingState> ownedSettings)
     {
         Directory.CreateDirectory(Paths.StateDirectory);
         var rendererSha256 = rendererPayloadHashes[settings.Profile.Id];
-        var state = new
+        var state = new InstallationState
         {
-            schemaVersion = 1,
-            installedAt = DateTimeOffset.UtcNow,
-            rendererProfile = settings.Profile.Id,
-            rendererSha256,
-            originalRendererSha256 = HashFile(Paths.RendererBackupPath),
-            stableGptpSha256 = HashFile(Paths.GptpPath),
+            SchemaVersion = 2,
+            InstalledAt = DateTimeOffset.UtcNow,
+            RendererProfile = settings.Profile.Id,
+            RendererSha256 = rendererSha256,
+            OriginalRendererSha256 = HashFile(Paths.RendererBackupPath),
+            StableGptpSha256 = HashFile(Paths.GptpPath),
+            DdrawOwnedSettings = ownedSettings,
         };
         AtomicWrite(Paths.StatePath,
             new UTF8Encoding(false).GetBytes(JsonSerializer.Serialize(state,
-                new JsonSerializerOptions { WriteIndented = true })));
+                StateJsonOptions)));
     }
 
     private static List<Process> GetGameProcesses() =>

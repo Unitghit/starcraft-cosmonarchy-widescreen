@@ -86,7 +86,10 @@ the original files on request.
 `Release\Cosmonarchy Widescreen Settings.exe` is the portable
 user configuration path. It embeds the universal renderer, writes runtime
 presentation configuration, updates owned cnc-ddraw keys transactionally, and
-backs up/restores the pre-install aidebug and ddraw files. It never writes GPTP.
+backs up/restores the pre-install aidebug file. Its installation state tracks
+original and applied values for each owned ddraw key, allowing Restore to
+preserve later user changes and unrelated wrapper configuration. It never
+writes GPTP or `ddraw.dll`.
 
 ## Load-order rule
 

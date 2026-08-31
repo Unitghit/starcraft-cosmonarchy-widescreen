@@ -35,8 +35,10 @@ window, use `1920 x 1080` internally with `2x` external scale.
 ## Restore the original game
 
 Select **Restore Original** in the configurator. It restores the original
-renderer and cnc-ddraw settings, then removes generated configuration files,
-backups, logs, and diagnostics.
+renderer and removes the cnc-ddraw settings still owned by this configurator.
+It preserves unrelated `ddraw.ini` settings and values changed after the last
+Save. It never replaces or removes `ddraw.dll`. Generated configuration files,
+backups, logs, and diagnostics are then removed.
 
 The configurator EXE remains in the folder. It can be used again or deleted
 manually.

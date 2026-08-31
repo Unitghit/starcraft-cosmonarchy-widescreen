@@ -601,13 +601,15 @@ internal sealed class MainForm : Form
             if (!EnsureGameClosed())
                 return;
             if (MessageBox.Show(this,
-                    "Restore the original aidebug plugin and ddraw settings?",
+                    "Restore the original viewport renderer and remove the " +
+                    "widescreen-owned cnc-ddraw settings? Other cnc-ddraw " +
+                    "settings and ddraw.dll are left unchanged.",
                     "Restore original files", MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question) != DialogResult.Yes)
                 return;
             service.Restore();
             statusLabel.ForeColor = Color.DarkGreen;
-            statusLabel.Text = "Original files restored. Widescreen files removed.";
+            statusLabel.Text = "Original renderer and widescreen settings restored.";
             RefreshInstallationStatus();
         }
         catch (Exception exception)

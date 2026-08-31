@@ -107,7 +107,7 @@ internal static class Program
             else if (command.Equals("--restore", StringComparison.OrdinalIgnoreCase))
             {
                 service.Restore();
-                message = "Original files restored.";
+                message = "Original renderer and widescreen-owned settings restored.";
             }
             else
             {

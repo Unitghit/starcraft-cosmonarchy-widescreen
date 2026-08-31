@@ -55,6 +55,12 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Menu scaler verification failed'
 }
 
+& dotnet run --project (Join-Path $repository `
+    'ViewportConfigurator.Tests\ViewportConfigurator.Tests.csproj') -c Release
+if ($LASTEXITCODE -ne 0) {
+    throw 'Configurator owned INI regression tests failed'
+}
+
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 & dotnet publish (Join-Path $configurator 'CosmonarchyWidescreenSettings.csproj') `
     -c Release -r win-x64 --self-contained true `

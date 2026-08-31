@@ -20,6 +20,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>CosmonarchyWidescreenSettings.Tests</_Parameter1>
+    </AssemblyAttribute>
     <EmbeddedResource Include="Payloads\1280x720\aize_debug.qdp"
                       LogicalName="CosmonarchyWidescreen.Payload.aize_debug.1280x720.qdp" />
     <EmbeddedResource Include="..\ZoomSource\Cosmonarchy-aidebug-resolution\LICENSE"

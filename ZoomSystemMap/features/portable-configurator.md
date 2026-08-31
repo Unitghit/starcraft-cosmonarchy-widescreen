@@ -19,7 +19,8 @@ same universal renderer payload.
 |---|---|
 | `plugins/aize_debug.qdp` | Back up once, install embedded universal renderer, verify hash |
 | `cosmonarchy_viewport.ini` | Write internal-profile identity and runtime presentation settings |
-| `../Starcraft/ddraw.ini` | Preserve file and update only owned top-level presentation keys |
+| `../Starcraft/ddraw.ini` | Normalize and update only owned top-level presentation keys |
+| `../Starcraft/ddraw.dll` | Never write, replace, rename, or remove |
 | `.cosmonarchy-widescreen/` | Store original backup and installation state |
 | `plugins/gptp.qdp` | Read/hash only; never write |
 
@@ -49,6 +50,11 @@ corresponding raster scale and physical-to-logical mouse mapping.
   atomic replacement.
 - A failed multi-file apply restores the pre-transaction bytes.
 - Restore requires a verified original aidebug backup.
+- Installation state records the original and last-applied value of every owned
+  ddraw key. Restore reverts a key only while it still equals the last-applied
+  value, preserving later user or wrapper changes.
+- Active duplicates are collapsed only for owned keys. Unowned keys, comments,
+  sections, and the wrapper DLL are preserved.
 - Runtime verification records config path, internal size, output size, mode,
   compatibility, and actual client dimensions in
   `fixed_zoom_presentation.log`.
@@ -60,7 +66,8 @@ corresponding raster scale and physical-to-logical mouse mapping.
 - Self-contained .NET 8 WinForms publish produces one executable.
 - Per-Monitor-V2 layout was captured and inspected at 200% display scaling.
 - Isolated Save installed the payload and generated 1280x720 -> 3200x1800.
-- Isolated Restore returned renderer and ddraw files byte-for-byte.
+- Isolated Restore returned the renderer byte-for-byte and restored owned ddraw
+  values without replacing unrelated settings.
 - Borderless smoke test generated 3840x2160, `fullscreen=true`,
   `windowed=true`, borderless presentation and then restored cleanly.
 - Real normal-launch runtime read `cosmonarchy_viewport.ini` with

@@ -70,6 +70,25 @@ internal sealed record ViewportSettings(
 
 internal sealed record ValidationResult(bool Success, string Message);
 
+internal sealed class DdrawOwnedSettingState
+{
+    public bool OriginalPresent { get; init; }
+    public string? OriginalValue { get; init; }
+    public string AppliedValue { get; init; } = string.Empty;
+}
+
+internal sealed class InstallationState
+{
+    public int SchemaVersion { get; init; }
+    public DateTimeOffset InstalledAt { get; init; }
+    public string RendererProfile { get; init; } = string.Empty;
+    public string RendererSha256 { get; init; } = string.Empty;
+    public string OriginalRendererSha256 { get; init; } = string.Empty;
+    public string StableGptpSha256 { get; init; } = string.Empty;
+    public Dictionary<string, DdrawOwnedSettingState> DdrawOwnedSettings { get; init; } =
+        new(StringComparer.OrdinalIgnoreCase);
+}
+
 internal sealed record CompatibilityManifest(
     int SchemaVersion,
     string StarCraftSha256,

@@ -53,9 +53,15 @@ Release/
 
 The configurator embeds the viewport renderer. It transactionally replaces
 `plugins/aize_debug.qdp`, updates only the top-level cnc-ddraw settings it owns,
-and verifies installed hashes. **Restore Original** restores the files captured
-before the first Save, then removes the generated viewport configuration,
-installation record, backups, configurator log, and `fixed_zoom*` diagnostics.
+and verifies installed hashes. It never writes or replaces `ddraw.dll`. For each
+owned `ddraw.ini` key, the installation record stores the original value and the
+last value applied by the configurator. Active duplicates of owned keys are
+normalized to one entry. **Restore Original** reverts a key only when its current
+value still matches the value last applied by the configurator. A value changed
+by the user or another cnc-ddraw tool is preserved. Unrelated keys, comments,
+sections, and `ddraw.dll` remain untouched. Restore then removes the generated
+viewport configuration, installation record, backups, configurator log, and
+`fixed_zoom*` diagnostics.
 The configurator executable remains so the user can run it again or delete it
 manually.
 
@@ -88,6 +94,9 @@ and aidebug license are embedded resources.
   representative `--apply-profile=<width>x<height>`,
   `--apply-custom=<width>x<height>`, and `--restore` smoke paths before
   publishing.
+- Run the owned-INI regression tests in `ViewportConfigurator.Tests` before
+  publishing. They cover duplicate keys, later user changes, missing original
+  keys, and unrelated settings.
 - Publish a SHA-256 checksum beside every GitHub release asset.
 - Do not package Cosmonarchy, StarCraft, GPTP, cnc-ddraw, maps, or audiovisual
   assets without explicit redistribution permission.

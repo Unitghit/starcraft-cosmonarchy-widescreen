@@ -17,9 +17,11 @@ Window mode: Windowed or borderless fullscreen
 
 RESTORE
 
-Select Restore Original to restore the original renderer and cnc-ddraw
-settings. Generated configuration files, backups, logs, and diagnostics are
-removed. The settings EXE remains and can be deleted manually.
+Select Restore Original to restore the original renderer and remove only the
+cnc-ddraw settings still owned by this configurator. Unrelated settings,
+later user changes, and ddraw.dll are preserved. Generated configuration
+files, backups, logs, and diagnostics are removed. The settings EXE remains
+and can be deleted manually.
 
 SOURCE
 
