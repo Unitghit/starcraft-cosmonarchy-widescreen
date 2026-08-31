@@ -102,7 +102,7 @@ For every affected value, choose exactly one class:
 - per-pass local coordinates;
 - world pixels;
 - map tiles;
-- structure dimension, pitch, count, pointer, or flag—not a coordinate.
+- structure dimension, pitch, count, pointer, or flag, not a coordinate.
 
 This gate prevents the placement regression where the 128x128 ghost surface
 dimensions were mistakenly translated as positions.

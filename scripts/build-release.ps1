@@ -1,8 +1,16 @@
+param(
+    [string]$Version = '0.3.0'
+)
+
 $ErrorActionPreference = 'Stop'
 
 $repository = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $configurator = Join-Path $repository 'ViewportConfigurator'
 $output = Join-Path $repository 'artifacts\release'
+$bundleRoot = Join-Path $repository 'artifacts\bundle'
+$bundleName = "StarCraft-Cosmonarchy-Widescreen-v$Version"
+$bundleDirectory = Join-Path $bundleRoot $bundleName
+$bundleArchive = Join-Path $output "$bundleName.zip"
 
 & (Join-Path $configurator 'build-profile-pack.ps1')
 if ($LASTEXITCODE -ne 0) {
@@ -32,6 +40,46 @@ $checksum = "$hash *Cosmonarchy Widescreen Settings.exe`n"
     (Join-Path $output 'SHA256SUMS.txt'), $checksum,
     [System.Text.UTF8Encoding]::new($false))
 
+$expectedBundleRoot = [System.IO.Path]::GetFullPath($bundleRoot).TrimEnd(
+    [System.IO.Path]::DirectorySeparatorChar) +
+    [System.IO.Path]::DirectorySeparatorChar
+$resolvedBundleDirectory = [System.IO.Path]::GetFullPath($bundleDirectory)
+if (-not $resolvedBundleDirectory.StartsWith(
+        $expectedBundleRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Unexpected bundle directory: $resolvedBundleDirectory"
+}
+if (Test-Path -LiteralPath $bundleDirectory) {
+    [System.IO.Directory]::Delete($bundleDirectory, $true)
+}
+New-Item -ItemType Directory -Path $bundleDirectory -Force | Out-Null
+
+Copy-Item -LiteralPath $executable -Destination $bundleDirectory
+Copy-Item -LiteralPath (Join-Path $output 'SHA256SUMS.txt') `
+    -Destination $bundleDirectory
+Copy-Item -LiteralPath (Join-Path $repository 'RELEASE-README.txt') `
+    -Destination (Join-Path $bundleDirectory 'README.txt')
+Copy-Item -LiteralPath (Join-Path $repository 'LICENSE') `
+    -Destination (Join-Path $bundleDirectory 'LICENSE.txt')
+Copy-Item -LiteralPath (Join-Path $repository 'THIRD-PARTY-NOTICES.md') `
+    -Destination (Join-Path $bundleDirectory 'THIRD-PARTY-NOTICES.txt')
+
+if (Test-Path -LiteralPath $bundleArchive) {
+    Remove-Item -LiteralPath $bundleArchive -Force
+}
+Compress-Archive -LiteralPath $bundleDirectory -DestinationPath $bundleArchive `
+    -CompressionLevel Optimal
+
+$bundleHash = (Get-FileHash -LiteralPath $bundleArchive -Algorithm SHA256).Hash
+$releaseChecksums = @(
+    "$hash *Cosmonarchy Widescreen Settings.exe"
+    "$bundleHash *$bundleName.zip"
+) -join "`n"
+[System.IO.File]::WriteAllText(
+    (Join-Path $output 'SHA256SUMS.txt'), "$releaseChecksums`n",
+    [System.Text.UTF8Encoding]::new($false))
+
 Write-Output "Release build: PASS"
 Write-Output "Executable: $executable"
 Write-Output "SHA-256: $hash"
+Write-Output "Bundle: $bundleArchive"
+Write-Output "Bundle SHA-256: $bundleHash"

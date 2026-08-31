@@ -80,8 +80,8 @@ cursor updater calls its copy at module RVA `0x67F7E`. Those calls cannot be
 repaired after dispatch because Windows has already queued a synthetic
 `WM_MOUSEMOVE` in the obsolete 4:3 HUD. Both guarded imports are therefore
 suppressed only while a translated HUD event is inside the native window
-procedure. The entire captured left-button sequence—down, minimap camera
-moves, and release—uses this scope, so the physical cursor remains over the
+procedure. The entire captured left-button sequence, including down, minimap
+camera moves, and release, uses this scope, so the physical cursor remains over the
 presented minimap throughout a drag.
 
 The local cnc-ddraw presentation shim owns an additional cursor clip and

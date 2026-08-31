@@ -1,4 +1,4 @@
-# Cosmonarchy Widescreen 0.3.0
+# StarCraft Cosmonarchy Widescreen 0.3.0
 
 This is the first public release candidate of the Cosmonarchy expanded viewport
 and resolution configurator.

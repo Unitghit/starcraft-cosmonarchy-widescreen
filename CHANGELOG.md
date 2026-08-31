@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — first release candidate
+## 0.3.0, first release candidate
 
 - Added one universal runtime-resolution renderer supporting internal sizes
   from 640x480 through 3840x2160.

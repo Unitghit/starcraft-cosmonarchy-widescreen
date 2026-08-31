@@ -57,7 +57,7 @@ type names them `right/bottom`.
 
 An early pass translation treated `0x64095C/64` as position records. Applying
 camera deltas to the first two words therefore changed the ghost surface's
-dimensions—for example, a valid 128x128 surface could become negative or
+dimensions. For example, a valid 128x128 surface could become negative or
 truncated in non-first passes. The observed result was a ghost visible only in
 part of the original 4:3 area.
 
