@@ -71,6 +71,9 @@ namespace
     uint32_t previous_world_camera_x;
     uint32_t previous_world_camera_y;
     bool previous_world_frame_valid;
+    bool replay_tunit_load_attempted;
+    bool replay_tunit_loaded;
+    uint8_t replay_tunit_colors[256 * 8];
     uint8_t cached_menu_source[native_frame_size];
     bool cached_menu_frame_valid;
     unsigned cached_menu_screen_width;
@@ -1066,6 +1069,49 @@ namespace
             static_cast<unsigned>(resolution::screen_height) - destination_y);
     }
 
+    bool LoadReplayTunitColors()
+    {
+        if (replay_tunit_load_attempted)
+            return replay_tunit_loaded;
+        replay_tunit_load_attempted = true;
+
+        HMODULE storm = GetModuleHandleA("storm.dll");
+        if (!storm)
+            return false;
+        using SBmpLoadImageFn = int (__stdcall *)(
+            const char *, void *, uint8_t *, uint32_t,
+            uint32_t *, uint32_t *, uint32_t *);
+        auto load_image = reinterpret_cast<SBmpLoadImageFn>(GetProcAddress(
+            storm, reinterpret_cast<LPCSTR>(static_cast<uintptr_t>(323))));
+        if (!load_image)
+            return false;
+        replay_tunit_loaded = load_image(
+            "game\\tunit.pcx", nullptr, replay_tunit_colors,
+            sizeof(replay_tunit_colors), nullptr, nullptr, nullptr) != 0;
+        return replay_tunit_loaded;
+    }
+
+    void RepairReplayPlayerColorRamps()
+    {
+        if (!is_in_replay() || !LoadReplayTunitColors())
+            return;
+
+        // Cosmonarchy extends the eight-pixel player-color ramp to 256 named
+        // sets in game\\tunit.pcx. Replay playback can restore the color ID
+        // without restoring the matching ramp for active player slots, which
+        // makes team-color pixels appear as unrelated speckles. Keep the ID
+        // authoritative and repair only a mismatched playable-player ramp.
+        for (unsigned player = 0; player < 8; ++player)
+        {
+            const unsigned color = bw::player_color_ids[player];
+            uint8_t *actual = &bw::player_in_game_colors[player * 8];
+            const uint8_t *expected =
+                replay_tunit_colors + color * 8;
+            if (memcmp(actual, expected, 8) != 0)
+                memcpy(actual, expected, 8);
+        }
+    }
+
     uint32_t AlignCameraDown(uint32_t value)
     {
         return value / resolution::camera_quantum *
@@ -1419,6 +1465,7 @@ void BeginStockDrawScreen()
     EnsureGptpUpgradeResearchClear();
     EnsureGptpInitialCameraCenter();
     EnsurePresentationCursorGuards();
+    RepairReplayPlayerColorRamps();
     ++stock_draw_depth;
     if (stock_draw_depth == 1 && !recursive_stock_draw && is_in_game())
     {

@@ -94,6 +94,17 @@ middle-button state and the active mouse-move callback at `0x005968AC`. The
 callback may be the verified native function at `0x00484460` or the
 resolution-aware replacement described in `architecture/input-pipeline.md`.
 
+## Replay player colors
+
+Cosmonarchy extends player colors through 256 eight-index ramps stored in
+`game\tunit.pcx`. Replay playback can restore the extended color ID at
+`0x0058F442` without restoring its matching ramp at `0x00581D76`, producing
+speckled team-color pixels even with the official renderer. Before replay
+drawing, the viewport renderer loads Cosmonarchy's own table through Storm
+ordinal 323 and validates playable slots 0 through 7. Only a ramp that differs
+from its current color ID is replaced. Normal matches and neutral slots 8
+through 11 are untouched.
+
 ## Placement layers
 
 Layers 3 and 4 contain the building-placement surfaces. The engine prepares

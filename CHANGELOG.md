@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.5, replay color hotfix
+
+- Fixed speckled extended player colors during replay playback.
+
 ## 0.4.4, camera and edge rendering hotfix
 
 - Fixed minimap dragging, cursor blinking, and legacy 4:3 cursor snapping.

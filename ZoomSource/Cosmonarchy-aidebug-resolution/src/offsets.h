@@ -306,7 +306,9 @@ namespace bw
     const offset<uint32_t> minimap_dot_checksum = 0x0059C1A8;
     const offset<uint8_t> minimap_resource_color = 0x006CEB39;
     const offset<uint8_t> minimap_color_mode = 0x06D5BBE;
+    const array_offset<uint8_t, 8 * 12> player_in_game_colors = 0x00581D76;
     const array_offset<uint8_t, 12> player_minimap_color = 0x00581DD6;
+    const array_offset<uint8_t, 12> player_color_ids = 0x0058F442;
     const offset<uint8_t> enemy_minimap_color = 0x006CEB34;
     const offset<uint8_t> ally_minimap_color = 0x006CEB31;
 

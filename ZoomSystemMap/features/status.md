@@ -19,6 +19,7 @@ Status here refers to the current 1280x720 build unless noted otherwise.
 | Middle-mouse pan rendering and motion | Fixed, confirmed | Gesture and every sub-quantum resting camera use a matched UI comparison pair; private columns render exact horizontal camera x instead of holding until an 8-pixel boundary; a confirmed temporal repair replaces the four stale edge columns at full-width internal pass boundaries; pan range and sensitivity derive from the configured battlefield |
 | Minimap cursor continuity | Fixed, confirmed | User test; cursor compositor identifies whether layer 0 is prepared in native or relocated coordinates on each captured minimap frame and applies the HUD offset only when needed |
 | Map-edge UI extraction | Fixed, confirmed | User test at map corners; requested and clamped camera positions use a matched world/UI comparison pair without modifying StarCraft's global camera limits |
+| Replay extended player colors | Fixed, confirmed | User test; playable-player color IDs are validated against Cosmonarchy's `game\tunit.pcx` ramps before replay drawing and only mismatched ramps are repaired |
 | Cursor can traverse expanded client | Confirmed | Input trace reaches x=1279 |
 | Click and drag beyond native 4:3 | Confirmed | User test and raw/forwarded command traces |
 | Same-type modifier selection | Expanded, confirmed | Stable-GPTP Ctrl and Ctrl+Shift visible-unit rectangles derive from runtime viewport dimensions; user test outside the original 4:3 area |

@@ -79,6 +79,8 @@ Addresses in the StarCraft tables are absolute addresses for the supported
 |---:|---|---|
 | `0x0051BFB0` | Main window handle | Confirmed |
 | `0x0057F1D4/1D6` | Map width/height in tiles | Confirmed |
+| `0x00581D76` | Twelve eight-index player-color ramps | Source-confirmed and captured live; replay slots 0 and 1 contained malformed ramps while their extended color IDs remained correct |
+| `0x0058F442` | Twelve extended player-color IDs | Source-confirmed; indexes Cosmonarchy's 256-set `game\tunit.pcx` table |
 | `0x005993B0` | Native renderer/input game rectangle | Confirmed shared consumer |
 | `0x00596B70` | Current cursor type | Confirmed by disassembly and live transitions |
 | `0x00597394` | Current cursor GRP pointer | Confirmed by disassembly and live transitions |

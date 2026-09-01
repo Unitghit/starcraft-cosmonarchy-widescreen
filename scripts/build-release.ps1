@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.4.4'
+    [string]$Version = '0.4.5'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,7 +36,11 @@ $diagnosticMarkers = @(
     'fixed_zoom_cursor_hover.log',
     'fixed_zoom_first_frame.raw',
     'fixed_zoom_first_frame.txt',
-    'fixed_zoom_presentation.log'
+    'fixed_zoom_presentation.log',
+    'replay_color_capture.txt',
+    'replay_color_outer_stock.raw',
+    'replay_color_private_0.raw',
+    'replay_color_expanded_world.raw'
 )
 foreach ($marker in $diagnosticMarkers) {
     if ($rendererText.Contains($marker)) {
