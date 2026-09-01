@@ -1,8 +1,8 @@
 # StarCraft Cosmonarchy Widescreen
 
-StarCraft Cosmonarchy Widescreen adds modern resolutions to Cosmonarchy while
-keeping gameplay, input, the HUD, minimap, overlays, camera behavior, and
-positional audio aligned correctly.
+StarCraft Cosmonarchy Widescreen is a resolution changer for Cosmonarchy with
+widescreen support, custom resolutions, independent display scaling, windowed
+and fullscreen modes, and adjustable top UI layouts.
 
 It includes a small Windows configurator. Internal gameplay resolution and
 external window size can be adjusted independently.
