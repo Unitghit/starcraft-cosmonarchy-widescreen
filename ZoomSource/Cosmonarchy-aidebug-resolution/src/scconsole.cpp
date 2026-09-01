@@ -2459,7 +2459,18 @@ uint16_t GetExpandedStatusTooltipControlIndex()
 
 bool ShouldSuppressTranslatedHudCursorWarp()
 {
-    return suppress_translated_hud_cursor_warp;
+    // GPTP polls minimap dragging between window messages. Keep every
+    // verified ClipCursor and SetCursorPos import guarded for the complete
+    // captured drag, not only while ConsoleWndProc dispatches one translated
+    // message. Otherwise an inter-message poll can restore the obsolete
+    // native minimap clip and synchronously pull the pointer up and left.
+    return suppress_translated_hud_cursor_warp ||
+        translated_minimap_drag_active;
+}
+
+bool IsTranslatedMinimapDragActive()
+{
+    return translated_minimap_drag_active;
 }
 
 LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -2538,7 +2549,11 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         *bw::popup_dialog_active == 0 &&
         !expanded_battlefield_drag_active &&
         (direct_expanded_hud_hit || translated_hud_drag_active);
-    const bool translated_hud_button_event = translated_hud_event &&
+    const bool translated_popup_event = trace_mouse &&
+        *bw::popup_dialog_active != 0;
+    const bool translated_ui_event =
+        translated_hud_event || translated_popup_event;
+    const bool translated_ui_button_event = translated_ui_event &&
         (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP ||
          msg == WM_LBUTTONDBLCLK || msg == WM_RBUTTONDOWN ||
          msg == WM_RBUTTONUP || msg == WM_RBUTTONDBLCLK ||
@@ -2547,7 +2562,7 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
          msg == WM_XBUTTONUP || msg == WM_XBUTTONDBLCLK);
     POINT physical_cursor_before_hud_click = {};
     const bool physical_cursor_before_valid =
-        translated_hud_button_event &&
+        translated_ui_button_event &&
         GetCursorPos(&physical_cursor_before_hud_click) != FALSE;
     const bool gameplay_button_down =
         msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK ||
@@ -2750,18 +2765,18 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
     // the native dispatch so unrelated engine cursor warps remain untouched.
     const uint32_t camera_before_x = *bw::screen_x;
     const uint32_t camera_before_y = *bw::screen_y;
-    if (translated_hud_event) {
+    if (translated_ui_event) {
         // Cosmonarchy's minimap_game_mouse_update reads g_mouse directly
         // rather than the DialogEvent point. Keep that shared store in the
         // same native coordinate space as lparam for the duration of native
-        // HUD dispatch. It is restored to the physical point below before
-        // cursor drawing, building ghosts, or expanded gameplay consume it.
+        // UI dispatch. Popup dialogs use the same native coordinate system.
+        // The store is restored below before expanded rendering consumes it.
         *bw::mouse_clickpos_x = trace_forwarded_x;
         *bw::mouse_clickpos_y = trace_forwarded_y;
     }
     const bool saved_cursor_warp_suppression =
         suppress_translated_hud_cursor_warp;
-    suppress_translated_hud_cursor_warp = translated_hud_event;
+    suppress_translated_hud_cursor_warp = translated_ui_event;
     const LRESULT result = CallWindowProcA(OldWndProc, hwnd, msg, wparam, lparam);
     suppress_translated_hud_cursor_warp = saved_cursor_warp_suppression;
     uint32_t camera_after_x = *bw::screen_x;
@@ -2836,7 +2851,7 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
     expected_gameplay_click_valid = false;
     const bool hold_native_minimap_mouse =
         translated_minimap_drag_active && msg != WM_LBUTTONUP;
-    if (hidden_native_ui_hit || translated_hud_event) {
+    if (hidden_native_ui_hit || translated_ui_event) {
         if (hold_native_minimap_mouse) {
             // minimap_game_mouse_update is polled between window messages
             // while capture is held. Preserve its native point for that full
@@ -2853,7 +2868,7 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
             *bw::mouse_clickpos_y = trace_raw_y;
         }
     }
-    if (translated_hud_event) {
+    if (translated_ui_event || hidden_native_ui_hit) {
         if (hold_native_minimap_mouse) {
             SetExpandedCursorOffset(
                 static_cast<int>(resolution::hud_left),
@@ -2861,8 +2876,13 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
                     resolution::native_hud_top));
         }
         else {
-            // Restoring mouse_clickpos also makes StarCraft rebuild cursor
-            // layer 0 at the expanded point. Do not translate it twice.
+            // Native dispatch has already rebuilt cursor layer 0 using the
+            // forwarded 640x480 coordinate. Writing the expanded g_mouse
+            // values back does not rebuild that layer by itself. Run the
+            // engine's own cursor refresh after the restore so the very next
+            // composed frame uses the physical position instead of flashing
+            // the stale native cursor for one frame.
+            bw::RefreshCursorLayer();
             SetExpandedCursorOffset(0, 0);
         }
     }

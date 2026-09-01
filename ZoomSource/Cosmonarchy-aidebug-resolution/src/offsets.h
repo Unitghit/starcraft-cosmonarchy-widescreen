@@ -266,6 +266,9 @@ namespace bw
     // Cursor state selected by get_cursor_type and the active cursor GRP.
     const offset<uint32_t> cursor_type = 0x00596B70;
     const offset<void *> current_cursor = 0x00597394;
+    // Input callback installed as 0x00484460 by native middle-button down and
+    // cleared by native middle-button up after the gesture has fully ended.
+    const offset<void *> middle_pan_move_proc = 0x005968AC;
     // Screen-space drag-selection state. The rectangle is inclusive while
     // g_is_drag_selecting is set; it is converted to world coordinates only
     // when the mouse button is released.
@@ -452,6 +455,9 @@ namespace bw
     const offset<uint32_t> screen_y = 0x006284A8;
     const offset<uint32_t> screen_x_max = 0x00628488;
     const offset<uint32_t> screen_y_max = 0x006284B0;
+    // Smoothed camera position used by the native middle-pan anchor encoder.
+    const offset<uint32_t> middle_pan_camera_x = 0x00628448;
+    const offset<uint32_t> middle_pan_camera_y = 0x00628470;
     const array_offset<RevListHead<Sprite, 0x0>, 0x100> horizontal_sprite_lines = 0x00629688;
     const array_offset<ListHead<Sprite, 0x0>, 0x100> horizontal_sprite_lines_rev = 0x00629288;
     const offset<Sprite *> first_active_lone_sprite = 0x00654874;

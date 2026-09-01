@@ -16,7 +16,9 @@ Status here refers to the current 1280x720 build unless noted otherwise.
 | Top-screen objectives/resources layout | Both modes confirmed; runtime-selectable; centered default | `centered_native_box` and resolution-derived `screen_edges` policies passed user tests and are exposed independently in the configurator |
 | Duplicate/flickering text UI | Fixed, confirmed | Text drawn once after composition |
 | Duplicate selection rectangle | Fixed, confirmed | Direct once-per-frame expanded draw |
-| Middle-mouse pan rendering | Fixed, confirmed | User test; gesture-time UI extraction uses a fresh current-camera pass paired with the fresh game-only reference, preventing stale stock-map pixels from becoming ghost UI bands |
+| Middle-mouse pan rendering and motion | Fixed, confirmed | Gesture and every sub-quantum resting camera use a matched UI comparison pair; private columns render exact horizontal camera x instead of holding until an 8-pixel boundary; a confirmed temporal repair replaces the four stale edge columns at full-width internal pass boundaries; pan range and sensitivity derive from the configured battlefield |
+| Minimap cursor continuity | Fixed, confirmed | User test; cursor compositor identifies whether layer 0 is prepared in native or relocated coordinates on each captured minimap frame and applies the HUD offset only when needed |
+| Map-edge UI extraction | Fixed, confirmed | User test at map corners; requested and clamped camera positions use a matched world/UI comparison pair without modifying StarCraft's global camera limits |
 | Cursor can traverse expanded client | Confirmed | Input trace reaches x=1279 |
 | Click and drag beyond native 4:3 | Confirmed | User test and raw/forwarded command traces |
 | Same-type modifier selection | Expanded, confirmed | Stable-GPTP Ctrl and Ctrl+Shift visible-unit rectangles derive from runtime viewport dimensions; user test outside the original 4:3 area |

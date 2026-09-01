@@ -1088,6 +1088,131 @@ namespace
         }
         return true;
     }
+
+    int expanded_middle_pan_anchor_x;
+    int expanded_middle_pan_anchor_y;
+
+    uint32_t ExpandedMiddlePanRange(unsigned map_pixels,
+                                    unsigned viewport_pixels)
+    {
+        return map_pixels > viewport_pixels ?
+            map_pixels - viewport_pixels : 0;
+    }
+
+    unsigned ExpandedMiddlePanPercent(int mouse, int anchor)
+    {
+        return static_cast<unsigned>(std::max(0,
+            std::min(mouse - anchor + 50, 100)));
+    }
+
+    void __fastcall ExpandedMiddlePanMove(void *)
+    {
+        const uint32_t range_x = ExpandedMiddlePanRange(
+            static_cast<unsigned>(*bw::map_width),
+            static_cast<unsigned>(resolution::game_width));
+        const uint32_t range_y = ExpandedMiddlePanRange(
+            static_cast<unsigned>(*bw::map_height),
+            static_cast<unsigned>(resolution::game_height));
+        const unsigned percent_x = ExpandedMiddlePanPercent(
+            static_cast<int>(*bw::mouse_clickpos_x),
+            expanded_middle_pan_anchor_x);
+        const unsigned percent_y = ExpandedMiddlePanPercent(
+            static_cast<int>(*bw::mouse_clickpos_y),
+            expanded_middle_pan_anchor_y);
+        const uint32_t target_x = static_cast<uint32_t>(
+            static_cast<uint64_t>(range_x) * percent_x / 100);
+        const uint32_t target_y = static_cast<uint32_t>(
+            static_cast<uint64_t>(range_y) * percent_y / 100);
+        bw::MoveScreen(static_cast<int>(target_x),
+                       static_cast<int>(target_y));
+    }
+
+    void __fastcall ExpandedMiddlePanBegin(void *event)
+    {
+        const uint8_t *bytes = static_cast<const uint8_t *>(event);
+        const int event_x = event ?
+            *reinterpret_cast<const int16_t *>(bytes + 0x0E) :
+            static_cast<int>(*bw::mouse_clickpos_x);
+        const int event_y = event ?
+            *reinterpret_cast<const int16_t *>(bytes + 0x10) :
+            static_cast<int>(*bw::mouse_clickpos_y);
+        const uint32_t range_x = ExpandedMiddlePanRange(
+            static_cast<unsigned>(*bw::map_width),
+            static_cast<unsigned>(resolution::game_width));
+        const uint32_t range_y = ExpandedMiddlePanRange(
+            static_cast<unsigned>(*bw::map_height),
+            static_cast<unsigned>(resolution::game_height));
+        const uint32_t camera_x = std::min(
+            static_cast<uint32_t>(*bw::middle_pan_camera_x), range_x);
+        const uint32_t camera_y = std::min(
+            static_cast<uint32_t>(*bw::middle_pan_camera_y), range_y);
+        const unsigned percent_x = range_x ? static_cast<unsigned>(
+            static_cast<uint64_t>(camera_x) * 100 / range_x) : 0;
+        const unsigned percent_y = range_y ? static_cast<unsigned>(
+            static_cast<uint64_t>(camera_y) * 100 / range_y) : 0;
+        expanded_middle_pan_anchor_x = event_x -
+            static_cast<int>(percent_x) + 50;
+        expanded_middle_pan_anchor_y = event_y -
+            static_cast<int>(percent_y) + 50;
+
+        // Preserve the native cursor-layer cleanup performed when the gesture
+        // begins, then install the resolution-aware movement callback. Native
+        // middle-button release continues to clear this callback unchanged.
+        reinterpret_cast<void (__cdecl *)()>(0x004BE0B0)();
+        *bw::middle_pan_move_proc = reinterpret_cast<void *>(
+            &ExpandedMiddlePanMove);
+    }
+
+    bool PatchExpandedMiddlePan(Common::PatchContext *patch)
+    {
+        constexpr uintptr_t begin_address = 0x00484520;
+        constexpr uintptr_t move_address = 0x00484460;
+        const uint8_t expected_begin_prefix[] = {
+            0xA1, 0x48, 0x84, 0x62, 0x00,
+            0x6B, 0xC0, 0x64, 0x56,
+            0x0F, 0xB7, 0x35, 0x50, 0x84, 0x62, 0x00,
+            0x33, 0xD2,
+        };
+        const uint8_t expected_begin_tail[] = {
+            0xE8, 0x3A, 0x9B, 0x03, 0x00,
+            0xC7, 0x05, 0xAC, 0x68, 0x59, 0x00,
+            0x60, 0x44, 0x48, 0x00, 0x5E, 0xC3,
+        };
+        const uint8_t expected_move_prefix[] = {
+            0x8B, 0x0D, 0xF8, 0x56, 0x65, 0x00,
+            0xA1, 0xC4, 0xDD, 0x6C, 0x00, 0x2B, 0xC1,
+            0x8B, 0x0D, 0xC8, 0xDD, 0x6C, 0x00, 0x56,
+            0x8B, 0x35, 0xF4, 0x56, 0x65, 0x00,
+        };
+        const uint8_t expected_move_tail[] = {
+            0x5E, 0xE9, 0x44, 0x7F, 0x01, 0x00,
+        };
+        const uint8_t *begin = reinterpret_cast<const uint8_t *>(
+            begin_address + patch->GetDiff());
+        const uint8_t *move = reinterpret_cast<const uint8_t *>(
+            move_address + patch->GetDiff());
+        const bool signatures_match =
+            memcmp(begin, expected_begin_prefix,
+                   sizeof(expected_begin_prefix)) == 0 &&
+            memcmp(begin + 0x51, expected_begin_tail,
+                   sizeof(expected_begin_tail)) == 0 &&
+            memcmp(move, expected_move_prefix,
+                   sizeof(expected_move_prefix)) == 0 &&
+            memcmp(move + 0x96, expected_move_tail,
+                   sizeof(expected_move_tail)) == 0;
+        if (!signatures_match)
+            return false;
+        return patch->JumpHook(reinterpret_cast<void *>(begin_address),
+                               ExpandedMiddlePanBegin);
+    }
+}
+
+bool IsExpandedMiddlePanActive()
+{
+    const uintptr_t callback =
+        reinterpret_cast<uintptr_t>(*bw::middle_pan_move_proc);
+    return callback == 0x00484460 ||
+        callback == reinterpret_cast<uintptr_t>(&ExpandedMiddlePanMove);
 }
 
 void EnsureGptpPlacementBounds()
@@ -2140,6 +2265,7 @@ void PatchDraw(Common::PatchContext *patch)
     PatchStartLocationCameraOrigin(patch);
     PatchTriggerCenterView(patch);
     PatchPortraitCameraOrigins(patch);
+    PatchExpandedMiddlePan(patch);
     PatchPositionalAudioViewport(patch);
     PatchClipCursor(patch);
     PatchSetCursorPos(patch);

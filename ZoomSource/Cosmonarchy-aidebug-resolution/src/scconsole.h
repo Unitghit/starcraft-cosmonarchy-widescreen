@@ -150,6 +150,7 @@ void *StabilizeExpandedSelectionTooltip(void *control, void *event);
 bool ShouldHoldExpandedContextHelp();
 uint16_t GetExpandedStatusTooltipControlIndex();
 bool ShouldSuppressTranslatedHudCursorWarp();
+bool IsTranslatedMinimapDragActive();
 
 #endif // SC_CONSOLE_H
 

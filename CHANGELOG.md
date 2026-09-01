@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.4, camera and edge rendering hotfix
+
+- Fixed minimap dragging, cursor blinking, and legacy 4:3 cursor snapping.
+- Improved middle-mouse camera panning smoothness.
+- Fixed distorted map graphics and HUD flickering at map edges.
+
 ## 0.4.3, selection hotfix
 
 - Fixed Alt-click same-type selection outside the original 4:3 area.

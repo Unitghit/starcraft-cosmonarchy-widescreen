@@ -164,6 +164,7 @@ BW_FUNC(void(Image *, int), SetImageDirection32, 0x004D5EA0, Eax, Stack);
 BW_FUNC(void(Image *, int), SetImageDirection256, 0x004D5F80, Esi, Stack);
 BW_FUNC(int(const Unit *, int), MatchesHeight, 0x0045F8D0, Eax, Esi);
 BW_FUNC(int(int, int), GetTerrainHeight, 0x004BD0F0, Ecx, Eax);
+BW_FUNC(void(), RefreshCursorLayer, 0x004BE120);
 BW_FUNC(void(int, x32, y32, int), UpdateCreepDisappearance, 0x0047DE40, Stack, Edx, Ecx, Eax);
 BW_FUNC(bool(Unit *, int, int), Ai_AreOnConnectedRegions, 0x00438E70, Eax, Stack, Stack);
 BW_FUNC(bool(int, x32, y32), DoesFitHere, 0x0042D810, Ebx, Eax, Edi);

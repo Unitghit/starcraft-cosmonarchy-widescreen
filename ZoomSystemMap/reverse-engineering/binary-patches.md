@@ -29,9 +29,10 @@ The imported `ClipCursor` entry at `0x004FE37C` is replaced with
 
 The imported `SetCursorPos` entry at `0x004FE2CC` is replaced with a guarded
 forwarder. It calls the original function normally, but returns success without
-warping while `ConsoleWndProc` is dispatching a translated relocated-HUD event.
-This prevents minimap clicks and held camera drags from generating a stale
-synthetic mouse move at the native 4:3 coordinate.
+warping while `ConsoleWndProc` is dispatching translated relocated-UI input or
+while a captured minimap drag remains active between messages. This prevents
+minimap clicks and held camera drags from generating a stale synthetic mouse
+move at the native 4:3 coordinate.
 
 Stable GPTP owns a separate `SetCursorPos` import at module RVA `0x1D6274`.
 Its only verified caller is the custom cursor-update call at RVA `0x67F7E`.
@@ -111,6 +112,15 @@ The complete 20-byte midpoint/subtraction/call sequence at `0x004C6E64` is
 preflighted before either immediate changes. At 1280x720 the replacements are
 y=260 and x=640. Native `move_screen` retains map-edge clamping, and external
 presentation magnification is intentionally excluded.
+
+## Middle-mouse pan viewport range
+
+The native initializer at `0x00484520` and movement callback at `0x00484460`
+subtract 640 and 400 from the map dimensions before converting cursor
+position to a scroll target. A signature-checked replacement uses the runtime
+logical battlefield dimensions for both calculations. It also treats maps no
+larger than the viewport as a zero-range axis, so high internal resolutions do
+not underflow the native unsigned division.
 
 ## Portrait camera centering
 

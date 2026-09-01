@@ -56,6 +56,14 @@ polls between window messages. During that interval the cursor compositor adds
 the derived HUD offset, keeping the visible pointer at its physical location.
 Release, capture loss, cancel mode, or focus loss restores physical ownership.
 
+Frame capture showed that minimap polling can alternate cursor layer 0 between
+native and already-relocated rectangle coordinates during one captured press.
+The compositor compares the prepared rectangle with both coordinate spaces and
+applies the HUD offset only to the native form. It also retains the prepared
+cursor while the native redraw flag is temporarily clear, because the expanded
+frame is rebuilt rather than preserved like StarCraft's native framebuffer.
+This keeps the pointer continuously visible while clicking or dragging.
+
 ### Popup dialog
 
 While `popup_dialog_active` is nonzero, input is translated by the centered
@@ -95,11 +103,18 @@ Relocated controls can also call `SetCursorPos` with the translated native
 point. Both StarCraft and stable GPTP own independent imports; GPTP's custom
 cursor updater calls its copy at module RVA `0x67F7E`. Those calls cannot be
 repaired after dispatch because Windows has already queued a synthetic
-`WM_MOUSEMOVE` in the obsolete 4:3 HUD. Both guarded imports are therefore
-suppressed only while a translated HUD event is inside the native window
-procedure. The entire captured left-button sequence, including down, minimap
-camera moves, and release, uses this scope, so the physical cursor remains over the
-presented minimap throughout a drag.
+`WM_MOUSEMOVE` in the obsolete 4:3 HUD. Both guarded imports are suppressed
+while a translated UI event is inside the native window procedure. The guard
+also remains active between messages for the entire captured minimap drag,
+because GPTP polls minimap input outside window-message dispatch.
+
+Native UI dispatch rebuilds cursor layer 0 from the forwarded 640x480 point.
+After ordinary HUD or popup dispatch restores `g_mouse` to the physical
+expanded point, aidebug calls StarCraft's verified cursor-layer refresh at
+`0x004BE120`. This synchronizes the prepared layer area before the next
+composed frame and prevents a one-frame cursor image at the obsolete 4:3
+position. A captured minimap drag intentionally retains native `g_mouse` plus
+its draw offset until release, then performs the same physical refresh.
 
 The local cnc-ddraw presentation shim owns an additional cursor clip and
 position pair. At 2x external presentation scale, its legacy clip corner maps
@@ -107,6 +122,22 @@ to logical client point `(132,474)` and can synchronously clamp a relocated
 minimap click there. The verified `ddraw.dll` imports are routed through the
 same scoped guards; normal presentation input outside translated HUD dispatch
 still forwards to USER32 unchanged.
+
+## Middle-mouse camera panning
+
+StarCraft's native middle-pan initializer at `0x00484520` and movement
+callback at `0x00484460` convert cursor position to a percentage of the
+scrollable map. Their range calculations subtract the native 640x400
+battlefield from the map dimensions. That makes horizontal sensitivity and
+stepping especially inaccurate after the logical battlefield is widened.
+
+The initializer is replaced with a signature-checked compatibility function.
+It derives both scrollable ranges from the configured `game_width` and
+`game_height`, preserves the native cursor-layer cleanup, and installs a
+matching movement callback. Both calculations clamp an axis to a zero range
+when the configured viewport is at least as large as the map, avoiding native
+unsigned underflow and division-by-zero cases. Native middle-button release
+still clears the callback normally.
 
 ## Diagnostics
 

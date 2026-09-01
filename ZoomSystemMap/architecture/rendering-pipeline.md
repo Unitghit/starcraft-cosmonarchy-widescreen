@@ -44,17 +44,55 @@ at each pass camera while excluding `ON_SCREEN`, `ON_MOUSE`, and stat-res
 graphics that would otherwise repeat once per camera tile.
 
 StarCraft's `MoveScreen` routine floors both camera axes to an eight-pixel
-boundary. Every private-pass source crop is derived from that effective camera
-position, not the unrounded request. This keeps adjacent tiles contiguous when
-the centered overlap itself is not divisible by eight and prevents repeated
-pixel bands at resolution-dependent tile boundaries.
+boundary. Vertical private-pass source crops are derived from that effective
+camera position, not the unrounded request. Horizontally, a resolution such as
+1280 uses two complete 640-pixel columns and therefore has no spare source
+width for a sub-eight-pixel crop. Private world passes restore their requested
+exact x after `MoveScreen` updates camera bookkeeping, then rebuild visible
+sprite rows. The correction cannot cross a 32-pixel tile boundary. This makes
+every one-pixel horizontal camera update produce a new composed battlefield
+without adding a third private column or increasing render-pass count.
 
-Middle-mouse panning uses a fresh matched world and UI comparison pair because
-the stock backing surface is only partially refreshed during that gesture. The
-comparison pair deliberately omits GPTP map graphics. Rally lines remain in the
-already-rendered gameplay tiles, while their absence from both comparison
-frames prevents the HUD extraction step from copying a duplicate over the
-bottom interface.
+The outer camera is different from a private-pass camera. Cosmonarchy's
+middle-button panner can preserve positions between those eight-pixel
+boundaries. After the final private pass, aidebug calls `MoveScreen` to restore
+camera-dependent redraw state, then writes the saved exact outer x/y back
+before rebuilding visible-sprite rows. This preserves smooth one-pixel camera
+motion without changing the aligned geometry used by private native renders.
+
+At full-width private columns, such as the two 640-pixel passes used for
+1280x720, consecutive-frame captures proved that StarCraft can leave the final
+four columns of a pass stale during middle-button motion. There is no horizontal
+overlap available to hide that edge. While the gesture is active, the composer
+repairs only those four columns at each internal boundary from the previous
+repaired world frame, translated by the exact camera delta. Other columns and
+resolutions with overlapping passes keep their normal path, and the repair adds
+no render passes.
+
+Middle-mouse panning uses a fresh matched world and UI comparison pair while
+the gesture is active and whenever the saved outer camera has a remainder
+modulo the eight-pixel camera quantum. A normal private pass calls
+`MoveScreen`, so comparing it with an exact sub-quantum outer stock frame would
+compare terrain positions offset by up to seven pixels. Those differences are
+world pixels, not UI. Treating them as UI caused translucent terrain regions
+to be copied over the finished expanded frame after panning stopped. The
+matched pair makes both comparison inputs use the same effective camera for as
+long as that mismatch can exist.
+
+The same matched comparison path is used when StarCraft's outer camera request
+exceeds the configured expanded map edge and the compositor clamps its local
+camera. Without it, terrain differences between the requested and clamped
+positions were misclassified as top or bottom UI, producing flickering text and
+large ghost map blocks while edge-scroll remained active. StarCraft's global
+camera limits and native redraw cache remain unchanged.
+
+The comparison pair deliberately omits GPTP map graphics. Rally lines remain
+in the already-rendered gameplay tiles, while their absence from both
+comparison frames prevents the HUD extraction step from copying a duplicate
+over the bottom interface. Gesture ownership is the union of the physical
+middle-button state and the active mouse-move callback at `0x005968AC`. The
+callback may be the verified native function at `0x00484460` or the
+resolution-aware replacement described in `architecture/input-pipeline.md`.
 
 ## Placement layers
 

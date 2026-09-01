@@ -15,19 +15,28 @@ def main() -> int:
     parser.add_argument("width", type=int)
     parser.add_argument("height", type=int)
     parser.add_argument("output", type=pathlib.Path)
+    parser.add_argument("--palette", type=pathlib.Path)
     args = parser.parse_args()
     pixels = args.raw.read_bytes()
     expected = args.width * args.height
     if len(pixels) != expected:
         raise ValueError(f"expected {expected} bytes, got {len(pixels)}")
 
-    # A deterministic false-color palette makes boundaries, repeated regions,
-    # and zero-filled areas obvious without requiring the live game palette.
     palette = []
-    for value in range(256):
-        palette.extend(((value * 73) & 0xFF,
-                        (value * 151) & 0xFF,
-                        (value * 199) & 0xFF))
+    if args.palette:
+        colors = args.palette.read_bytes()
+        if len(colors) != 256 * 4:
+            raise ValueError(
+                f"expected a 1024-byte WPE palette, got {len(colors)}")
+        for value in range(256):
+            palette.extend(colors[value * 4:value * 4 + 3])
+    else:
+        # A deterministic false-color palette makes boundaries, repeated
+        # regions, and zero-filled areas obvious without a game palette.
+        for value in range(256):
+            palette.extend(((value * 73) & 0xFF,
+                            (value * 151) & 0xFF,
+                            (value * 199) & 0xFF))
     image = Image.frombytes("P", (args.width, args.height), pixels)
     image.putpalette(palette)
     image.save(args.output)

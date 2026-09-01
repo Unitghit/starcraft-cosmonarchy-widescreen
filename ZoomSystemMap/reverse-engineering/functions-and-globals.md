@@ -14,7 +14,12 @@ Addresses in the StarCraft tables are absolute addresses for the supported
 | `0x004810F0` | Native context layer update | Live layer-1 function |
 | `0x004BD580` | Raw native world draw | Used privately with a filtered stable-GPTP `ON_MAP` replay |
 | `0x004BD3A0` | Rebuild visible-sprite rows | Behavioral name, confirmed necessary per camera |
-| `0x004BDFA0` | Cursor layer update | Live layer-0 function |
+| `0x0049BFD0` | `UpdateScreenPosition` | Maintains five camera-phase accumulators, updates the tile cache, and invalidates viewport rectangles; direct private-pass use causes multiple displaced viewport regions |
+| `0x0049C440` | `MoveScreen` | Clamps camera coordinates, rounds both axes to the engine's eight-pixel quantum, and calls `UpdateScreenPosition` when the effective camera changes |
+| `0x00484460` | Native middle-pan movement | Converts cursor position through map-minus-640x400 ranges; replaced by the resolution-aware callback |
+| `0x00484520` | Native middle-pan initializer | Signature-checked replacement derives safe expanded ranges and installs the matching callback |
+| `0x004BDFA0` | Cursor layer rasterizer | Live layer-0 draw function |
+| `0x004BE120` | Refresh cursor layer | Rebuilds layer-0 area from `g_mouse` and the active cursor GRP |
 | `0x004BD614` | Screen-space game-text call | Replaced with no-op during native/private draw |
 | `0x004BD619` | Drag-selection call | Replaced; expanded box drawn once later |
 
@@ -77,6 +82,8 @@ Addresses in the StarCraft tables are absolute addresses for the supported
 | `0x005993B0` | Native renderer/input game rectangle | Confirmed shared consumer |
 | `0x00596B70` | Current cursor type | Confirmed by disassembly and live transitions |
 | `0x00597394` | Current cursor GRP pointer | Confirmed by disassembly and live transitions |
+| `0x005968AC` | Active mouse-move callback | Native middle-down installs `0x00484460`; middle-up clears it after ending panning |
+| `0x00628448/70` | Smoothed camera x/y | Used by the native middle-pan anchor encoder and its expanded replacement |
 | `0x0059CC6C` | Minimap zoom level (`u16`) | Source-confirmed; initialized per map |
 | `0x0057FD34/38` | Native portrait camera target x/y | Used by `0x0045E9F0`; live capture proved the Cosmonarchy bottom-HUD portrait path bypasses these globals |
 | `0x00597248` | Active portrait unit pointer | Used by the resolution-aware compatibility correction to obtain the live sprite world position |

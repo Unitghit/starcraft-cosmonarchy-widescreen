@@ -67,6 +67,10 @@ namespace
     uint8_t native_game_text_frame[native_frame_size];
     uint8_t native_stock_frame[native_frame_size];
     uint8_t native_inner_frame[native_frame_size];
+    std::vector<uint8_t> previous_world_frame;
+    uint32_t previous_world_camera_x;
+    uint32_t previous_world_camera_y;
+    bool previous_world_frame_valid;
     uint8_t cached_menu_source[native_frame_size];
     bool cached_menu_frame_valid;
     unsigned cached_menu_screen_width;
@@ -364,7 +368,12 @@ namespace
             last_cursor_grp = cursor_grp;
             last_native_state = static_cast<int>(inside_native_game);
         }
-        if (!cursor.draw || !cursor.Draw)
+        // The native framebuffer retains an already-rasterized cursor when
+        // StarCraft temporarily clears the layer redraw flag. Our expanded
+        // frame is composed from scratch, so keep using the prepared layer
+        // throughout a captured minimap drag or the pointer disappears for a
+        // frame on press.
+        if ((!cursor.draw && !IsTranslatedMinimapDragActive()) || !cursor.Draw)
             return;
 
         // The stock cursor rasterizer already clips against current_canvas,
@@ -386,10 +395,31 @@ namespace
         Surface *saved_canvas = *bw::current_canvas;
         *bw::current_canvas = &expanded_canvas;
         // Input over the centered HUD is translated to native control
-        // coordinates. Counteract only that translation while drawing so the
-        // cursor graphic remains at its physical on-screen position.
-        (*cursor.Draw)(-expanded_cursor_offset_x,
-                       -expanded_cursor_offset_y,
+        // coordinates. During a captured minimap drag, native cursor polling
+        // can alternate the prepared layer rectangle between native and
+        // already-relocated coordinates. Apply the HUD offset only when the
+        // current layer is closer to the native mouse point. Applying it to an
+        // already-relocated rectangle makes the rasterizer clip every pixel.
+        int draw_cursor_offset_x = expanded_cursor_offset_x;
+        int draw_cursor_offset_y = expanded_cursor_offset_y;
+        if (expanded_cursor_offset_x != 0 || expanded_cursor_offset_y != 0)
+        {
+            const int native_distance =
+                std::abs(static_cast<int>(cursor.area.left) - mouse_x) +
+                std::abs(static_cast<int>(cursor.area.top) - mouse_y);
+            const int physical_distance = std::abs(
+                static_cast<int>(cursor.area.left) -
+                    (mouse_x + expanded_cursor_offset_x)) +
+                std::abs(static_cast<int>(cursor.area.top) -
+                    (mouse_y + expanded_cursor_offset_y));
+            if (physical_distance < native_distance)
+            {
+                draw_cursor_offset_x = 0;
+                draw_cursor_offset_y = 0;
+            }
+        }
+        (*cursor.Draw)(-draw_cursor_offset_x,
+                       -draw_cursor_offset_y,
                        cursor.func_param, &param);
         *bw::current_canvas = saved_canvas;
     }
@@ -652,7 +682,8 @@ namespace
                               uint32_t base_camera_x,
                               uint32_t base_camera_y,
                               uint8_t *destination,
-                              bool draw_map_graphics = true)
+                              bool draw_map_graphics = true,
+                              bool preserve_exact_x = false)
     {
         uint8_t saved_draw[8];
         uint8_t saved_flags[8];
@@ -686,6 +717,15 @@ namespace
         *bw::screen_y_max = std::max(saved_screen_y_max, safe_screen_y_max);
         bw::MoveScreen(static_cast<int>(camera_x), static_cast<int>(camera_y));
         *bw::screen_y_max = saved_screen_y_max;
+        if (preserve_exact_x)
+        {
+            // MoveScreen rounds x down to eight pixels. Full-width private
+            // columns have no spare source pixels for compensating with a
+            // crop, so retain the requested x after MoveScreen has updated
+            // all camera-dependent bookkeeping. A sub-eight correction
+            // cannot cross a 32-pixel tile boundary.
+            *bw::screen_x = camera_x;
+        }
         // ScreenUpdateProc normally prepares only the outer camera's visible
         // sprite rows. Rebuild them for every private camera pass so units,
         // bullets, overlays, and lone sprites follow the moved viewport.
@@ -994,6 +1034,7 @@ namespace
                       uint32_t camera_x, uint32_t camera_y)
     {
         bw::MoveScreen(static_cast<int>(camera_x), static_cast<int>(camera_y));
+        *bw::screen_x = camera_x;
         memset(destination, 0, native_frame_size);
         SetNativeCanvas(screen, destination);
         ForceNativeRedraw();
@@ -1046,6 +1087,70 @@ namespace
                     resolution::native_width + source_x,
                 copy_width);
         }
+    }
+
+    void RepairMovingFullWidthPassEdges(uint32_t camera_x,
+                                        uint32_t camera_y,
+                                        bool middle_pan_active)
+    {
+        const size_t frame_size = expanded_frame_size();
+        if (previous_world_frame.size() != frame_size)
+        {
+            previous_world_frame.resize(frame_size);
+            previous_world_frame_valid = false;
+        }
+
+        if (middle_pan_active && previous_world_frame_valid &&
+            resolution::tile_width == resolution::native_width &&
+            resolution::tile_columns > 1)
+        {
+            const int64_t delta_x = static_cast<int64_t>(camera_x) -
+                previous_world_camera_x;
+            const int64_t delta_y = static_cast<int64_t>(camera_y) -
+                previous_world_camera_y;
+            constexpr unsigned stale_edge_width = 4;
+
+            for (unsigned column = 1;
+                 column < resolution::tile_columns; ++column)
+            {
+                const unsigned seam_x =
+                    column * resolution::tile_width;
+                if (seam_x < stale_edge_width ||
+                    seam_x > resolution::screen_width)
+                    continue;
+
+                for (unsigned y = 0; y < resolution::screen_height; ++y)
+                {
+                    const int64_t source_y =
+                        static_cast<int64_t>(y) + delta_y;
+                    if (source_y < 0 ||
+                        source_y >= resolution::screen_height)
+                        continue;
+
+                    for (unsigned x = seam_x - stale_edge_width;
+                         x < seam_x; ++x)
+                    {
+                        const int64_t source_x =
+                            static_cast<int64_t>(x) + delta_x;
+                        if (source_x < 0 ||
+                            source_x >= resolution::screen_width)
+                            continue;
+                        fake_screenbuf[
+                            static_cast<size_t>(y) *
+                                resolution::screen_width + x] =
+                            previous_world_frame[
+                                static_cast<size_t>(source_y) *
+                                    resolution::screen_width +
+                                static_cast<size_t>(source_x)];
+                    }
+                }
+            }
+        }
+
+        memcpy(previous_world_frame.data(), fake_screenbuf, frame_size);
+        previous_world_camera_x = camera_x;
+        previous_world_camera_y = camera_y;
+        previous_world_frame_valid = true;
     }
 
     void CopyTerrainTileGutters(const uint8_t *source, unsigned source_x,
@@ -1128,11 +1233,11 @@ namespace
                     base_x + column * resolution::tile_width;
                 const uint32_t desired_y =
                     base_y + row * resolution::tile_height;
-                // MoveScreen floors both axes to an eight-pixel boundary.
-                // Model that adjustment before deriving the source crop or
-                // adjacent passes can repeat a horizontal or vertical band.
-                const uint32_t actual_x = AlignCameraDown(
-                    std::min(desired_x, native_max_x));
+                // Preserve exact x inside RenderGameAt. Model MoveScreen's
+                // remaining y adjustment before deriving the source crop so
+                // adjacent passes cannot repeat a vertical band.
+                const uint32_t actual_x =
+                    std::min(desired_x, native_max_x);
                 const uint32_t actual_y = AlignCameraDown(
                     std::min(desired_y, native_max_y));
                 const unsigned source_x = std::min(
@@ -1355,7 +1460,9 @@ void AfterStockDrawScreen()
 
     static bool trace_first_call = true;
     if (trace_first_call)
+    {
         TracePostRenderer("enter");
+    }
 
     int physical_pitch = 0;
     if (trace_first_call)
@@ -1413,12 +1520,11 @@ void AfterStockDrawScreen()
                     desired_x - overlap_x : 0;
                 const uint32_t render_y = desired_y > overlap_y ?
                     desired_y - overlap_y : 0;
-                // MoveScreen floors both axes to an eight-pixel boundary.
-                // Use the effective camera position for the source crop so
-                // overlap offsets that are not multiples of eight remain
-                // pixel-contiguous at every tile boundary.
-                const uint32_t actual_x = AlignCameraDown(
-                    std::min(render_x, native_max_x));
+                // Private passes preserve exact x after MoveScreen. Keep y at
+                // its effective eight-pixel position and derive both overlap
+                // crops from the camera actually used by each axis.
+                const uint32_t actual_x =
+                    std::min(render_x, native_max_x);
                 const uint32_t actual_y = AlignCameraDown(
                     std::min(render_y, native_max_y));
                 const unsigned source_x = std::min(
@@ -1432,7 +1538,7 @@ void AfterStockDrawScreen()
                 uint8_t *target = row == 0 && column == 0 ?
                     native_game_reference : nullptr;
                 RunStockGameOnlyPass(actual_x, actual_y,
-                                     camera_x, camera_y, target);
+                                     camera_x, camera_y, target, true, true);
                 const uint8_t *rendered_frame = target ? target :
                     native_inner_frame;
                 CopyTerrainTile(rendered_frame, source_x, source_y,
@@ -1456,10 +1562,33 @@ void AfterStockDrawScreen()
         // They remain enabled in the expanded gameplay tiles rendered above.
         // Normal rendering keeps the existing path and pays no additional
         // pass cost.
-        const bool middle_pan_active =
+        const bool middle_button_down =
             (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+        const bool engine_middle_pan_active = IsExpandedMiddlePanActive();
+        // Windows can report the physical release before StarCraft has
+        // dispatched its middle-up event and cleared the installed camera
+        // callback. Keep the protected comparison path until both owners
+        // agree that the gesture has ended.
+        const bool middle_pan_active =
+            middle_button_down || engine_middle_pan_active;
+        RepairMovingFullWidthPassEdges(camera_x, camera_y,
+                                       middle_pan_active);
+        // MoveScreen rounds private render passes down to the engine's
+        // eight-pixel camera quantum. The outer stock frame retains the exact
+        // sub-quantum camera used by Cosmonarchy's smooth middle panner. A
+        // comparison between those two camera positions mistakes shifted
+        // terrain for UI and produces translucent duplicate regions. Build
+        // both comparison frames from the same camera whenever either axis has
+        // a sub-quantum remainder.
+        const bool camera_is_subquantum =
+            camera_x % resolution::camera_quantum != 0 ||
+            camera_y % resolution::camera_quantum != 0;
+        const bool outer_camera_was_clamped =
+            stock_camera_x != camera_x || stock_camera_y != camera_y;
+        const bool use_matched_ui_pair = middle_pan_active ||
+            camera_is_subquantum || outer_camera_was_clamped;
         const uint8_t *native_ui_frame = native_stock_frame;
-        if (middle_pan_active)
+        if (use_matched_ui_pair)
         {
             RunStockGameOnlyPass(camera_x, camera_y, camera_x, camera_y,
                                  native_game_reference, false);
@@ -1516,7 +1645,8 @@ void AfterStockDrawScreen()
         // popup branch centered the entire native canvas, shifting the HUD up
         // by native_ui_top (30 pixels) and making UI fragments jump whenever
         // the game menu opened.
-        if (stock_camera_x == camera_x && stock_camera_y == camera_y)
+        if (!outer_camera_was_clamped ||
+            native_ui_frame == native_current_ui_frame)
         {
             for (unsigned source_y = 0;
                  source_y < resolution::native_hud_top; ++source_y)
@@ -1697,6 +1827,16 @@ void AfterStockDrawScreen()
             }
         }
         bw::MoveScreen(static_cast<int>(camera_x), static_cast<int>(camera_y));
+        // Cosmonarchy's middle-button panner can retain sub-quantum camera
+        // positions for smooth motion. MoveScreen is still required to
+        // restore the engine's camera-dependent redraw state after our
+        // private passes, but it rounds both axes down to eight pixels.
+        // Restore the exact outer position after that bookkeeping so the
+        // compositor does not permanently quantize the live camera every
+        // frame. The tile globals written by MoveScreen remain correct because
+        // an eight-pixel round-down cannot cross a 32-pixel tile boundary.
+        *bw::screen_x = camera_x;
+        *bw::screen_y = camera_y;
         // Private passes rebuild the visible-sprite row index for their own
         // cameras. Restore it for the expanded camera before input processing;
         // otherwise unit hit-testing depends on whichever tile rendered last.
@@ -1705,6 +1845,7 @@ void AfterStockDrawScreen()
     }
     else
     {
+        previous_world_frame_valid = false;
         if (trace_first_call)
             TracePostRenderer("composing menu");
         LogLayerTable("menu");
