@@ -113,6 +113,31 @@ preflighted before either immediate changes. At 1280x720 the replacements are
 y=260 and x=640. Native `move_screen` retains map-edge clamping, and external
 presentation magnification is intentionally excluded.
 
+## Control-group camera centering
+
+Cosmonarchy implements control groups in stable `gptp.qdp`. A second tap or
+held press of a group key calls `ControlGroup::center_camera`, which has one
+path for a single unit and another for the average position of multiple units.
+Both paths subtract a hard-coded 320x200 center before calling GPTP's wrapper
+for native `move_screen` at `0x0049C440`.
+
+| GPTP operand RVA | Path | Native value | Runtime value |
+|---:|---|---:|---:|
+| `0x46DC8` | single-unit x compare | 320 | `camera_center_x` |
+| `0x46DDB` | single-unit x subtraction | -320 | `-camera_center_x` |
+| `0x46DE8` | single-unit y compare | 200 | `camera_center_y` |
+| `0x46DF6` | single-unit y subtraction | -200 as zero-extended 16-bit | `-camera_center_y` as zero-extended 16-bit |
+| `0x47136` | multi-unit x compare | 320 | `camera_center_x` |
+| `0x47144` | multi-unit x subtraction | -320 | `-camera_center_x` |
+| `0x47151` | multi-unit y compare | 200 | `camera_center_y` |
+| `0x4715E` | multi-unit y subtraction | -200 | `-camera_center_y` |
+
+The surrounding instruction sequences and all eight native operands are
+preflighted before any write. Internal viewport resolution controls the new
+center, external presentation scaling is excluded, and native map-edge
+clamping remains unchanged. The fix was confirmed with both single-unit and
+multi-unit control groups.
+
 ## Middle-mouse pan viewport range
 
 The native initializer at `0x00484520` and movement callback at `0x00484460`

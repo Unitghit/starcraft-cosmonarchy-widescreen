@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.6, control group camera hotfix
+
+- Fixed control group camera centering.
+
 ## 0.4.5, replay color hotfix
 
 - Fixed speckled extended player colors during replay playback.

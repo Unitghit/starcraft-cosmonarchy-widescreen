@@ -90,6 +90,16 @@ namespace
     GptpInitialCameraPatchState gptp_initial_camera_patch_state =
         GptpInitialCameraPatchState::WaitingForModule;
 
+    enum class GptpControlGroupCameraPatchState
+    {
+        WaitingForModule,
+        Installed,
+        Incompatible,
+    };
+
+    GptpControlGroupCameraPatchState gptp_control_group_camera_patch_state =
+        GptpControlGroupCameraPatchState::WaitingForModule;
+
     enum class PresentationCursorPatchState
     {
         WaitingForModule,
@@ -2107,6 +2117,214 @@ void EnsureGptpInitialCameraCenter()
         GptpInitialCameraPatchState::Installed;
 }
 
+void EnsureGptpControlGroupCameraCenter()
+{
+    if (gptp_control_group_camera_patch_state !=
+        GptpControlGroupCameraPatchState::WaitingForModule)
+        return;
+
+    HMODULE module = GetModuleHandleA("gptp.qdp");
+    if (!module)
+        module = GetModuleHandleA("CM-GPTP-Release.qdp");
+    if (!module)
+        return;
+
+    // ControlGroup::center_camera has separate paths for a one-unit group and
+    // a multi-unit averaged position. Both paths independently subtract the
+    // original 320x200 camera center before calling GPTP's move-screen helper.
+    constexpr uintptr_t single_rva = 0x00046DC7;
+    constexpr uintptr_t group_rva = 0x00047135;
+    constexpr size_t single_x_compare_offset = 0x01;
+    constexpr size_t single_x_subtract_offset = 0x14;
+    constexpr size_t single_y_compare_offset = 0x21;
+    constexpr size_t single_y_subtract_offset = 0x2F;
+    constexpr size_t group_x_compare_offset = 0x01;
+    constexpr size_t group_x_subtract_offset = 0x0F;
+    constexpr size_t group_y_compare_offset = 0x1C;
+    constexpr size_t group_y_subtract_offset = 0x29;
+    constexpr uint32_t native_x_center = 320;
+    constexpr uint32_t native_y_center = 200;
+    constexpr uint32_t native_x_subtract = 0u - native_x_center;
+    constexpr uint32_t native_single_y_subtract =
+        static_cast<uint16_t>(0u - native_y_center);
+    constexpr uint32_t native_group_y_subtract = 0u - native_y_center;
+    const uint32_t expanded_x_center = resolution::camera_center_x;
+    const uint32_t expanded_y_center = resolution::camera_center_y;
+    const uint32_t expanded_x_subtract = 0u - expanded_x_center;
+    const uint32_t expanded_single_y_subtract =
+        static_cast<uint16_t>(0u - expanded_y_center);
+    const uint32_t expanded_group_y_subtract = 0u - expanded_y_center;
+
+    uint8_t *base = reinterpret_cast<uint8_t *>(module);
+    uint8_t *single = base + single_rva;
+    uint8_t *group = base + group_rva;
+    uint32_t *single_x_compare = reinterpret_cast<uint32_t *>(
+        single + single_x_compare_offset);
+    uint32_t *single_x_subtract = reinterpret_cast<uint32_t *>(
+        single + single_x_subtract_offset);
+    uint32_t *single_y_compare = reinterpret_cast<uint32_t *>(
+        single + single_y_compare_offset);
+    uint32_t *single_y_subtract = reinterpret_cast<uint32_t *>(
+        single + single_y_subtract_offset);
+    uint32_t *group_x_compare = reinterpret_cast<uint32_t *>(
+        group + group_x_compare_offset);
+    uint32_t *group_x_subtract = reinterpret_cast<uint32_t *>(
+        group + group_x_subtract_offset);
+    uint32_t *group_y_compare = reinterpret_cast<uint32_t *>(
+        group + group_y_compare_offset);
+    uint32_t *group_y_subtract = reinterpret_cast<uint32_t *>(
+        group + group_y_subtract_offset);
+
+    const uint8_t single_prefix[] = {0xBA};
+    const uint8_t single_x_middle[] = {
+        0x89, 0x45, 0xF4, 0x0F, 0xB7, 0xC0, 0x8B, 0xC8,
+        0x66, 0x3B, 0xC2, 0x72, 0x08, 0x8D, 0x81,
+    };
+    const uint8_t single_before_y[] = {
+        0xEB, 0x02, 0x33, 0xC0, 0x66, 0x89, 0x45, 0xF4, 0xB9,
+    };
+    const uint8_t single_y_middle[] = {
+        0x66, 0x8B, 0x45, 0xF6, 0x66, 0x3B, 0xC1,
+        0x72, 0x20, 0xB9,
+    };
+    const uint8_t single_suffix[] = {
+        0x66, 0x03, 0xC1, 0x66, 0x89, 0x45, 0xF6,
+        0xFF, 0x75, 0xF4, 0xE8,
+    };
+    const uint8_t group_prefix[] = {0xBE};
+    const uint8_t group_x_middle[] = {
+        0x0F, 0xB7, 0xD0, 0x66, 0x3B, 0xCE,
+        0x72, 0x08, 0x8D, 0x8F,
+    };
+    const uint8_t group_before_y[] = {
+        0xEB, 0x02, 0x33, 0xC9, 0x66, 0x89, 0x4D, 0xEC, 0xB9,
+    };
+    const uint8_t group_y_middle[] = {
+        0x0F, 0xB7, 0xC0, 0x66, 0x3B, 0xD1, 0x72, 0x07, 0x05,
+    };
+    const uint8_t group_suffix[] = {
+        0xEB, 0x02, 0x33, 0xC0, 0x66, 0x89, 0x45, 0xEE,
+        0xFF, 0x75, 0xEC, 0xE8,
+    };
+    const bool signatures_match =
+        memcmp(single, single_prefix, sizeof(single_prefix)) == 0 &&
+        memcmp(single + 0x05, single_x_middle,
+               sizeof(single_x_middle)) == 0 &&
+        memcmp(single + 0x18, single_before_y,
+               sizeof(single_before_y)) == 0 &&
+        memcmp(single + 0x25, single_y_middle,
+               sizeof(single_y_middle)) == 0 &&
+        memcmp(single + 0x33, single_suffix,
+               sizeof(single_suffix)) == 0 &&
+        memcmp(group, group_prefix, sizeof(group_prefix)) == 0 &&
+        memcmp(group + 0x05, group_x_middle,
+               sizeof(group_x_middle)) == 0 &&
+        memcmp(group + 0x13, group_before_y,
+               sizeof(group_before_y)) == 0 &&
+        memcmp(group + 0x20, group_y_middle,
+               sizeof(group_y_middle)) == 0 &&
+        memcmp(group + 0x2D, group_suffix,
+               sizeof(group_suffix)) == 0;
+    const bool native_operands =
+        *single_x_compare == native_x_center &&
+        *single_x_subtract == native_x_subtract &&
+        *single_y_compare == native_y_center &&
+        *single_y_subtract == native_single_y_subtract &&
+        *group_x_compare == native_x_center &&
+        *group_x_subtract == native_x_subtract &&
+        *group_y_compare == native_y_center &&
+        *group_y_subtract == native_group_y_subtract;
+    const bool expanded_operands =
+        *single_x_compare == expanded_x_center &&
+        *single_x_subtract == expanded_x_subtract &&
+        *single_y_compare == expanded_y_center &&
+        *single_y_subtract == expanded_single_y_subtract &&
+        *group_x_compare == expanded_x_center &&
+        *group_x_subtract == expanded_x_subtract &&
+        *group_y_compare == expanded_y_center &&
+        *group_y_subtract == expanded_group_y_subtract;
+
+    FILE *log = fopen("fixed_zoom_renderer.log", "a");
+    if (!signatures_match || (!native_operands && !expanded_operands))
+    {
+        if (log)
+        {
+            fprintf(log,
+                "GPTP control-group camera preflight failed: module=%p "
+                "signatures=%u single=(%lu,%08lX,%lu,%08lX) "
+                "group=(%lu,%08lX,%lu,%08lX)\n",
+                module, static_cast<unsigned>(signatures_match),
+                static_cast<unsigned long>(*single_x_compare),
+                static_cast<unsigned long>(*single_x_subtract),
+                static_cast<unsigned long>(*single_y_compare),
+                static_cast<unsigned long>(*single_y_subtract),
+                static_cast<unsigned long>(*group_x_compare),
+                static_cast<unsigned long>(*group_x_subtract),
+                static_cast<unsigned long>(*group_y_compare),
+                static_cast<unsigned long>(*group_y_subtract));
+            fclose(log);
+        }
+        gptp_control_group_camera_patch_state =
+            GptpControlGroupCameraPatchState::Incompatible;
+        return;
+    }
+
+    if (native_operands)
+    {
+        DWORD single_protection = 0;
+        DWORD group_protection = 0;
+        if (!VirtualProtect(single, 0x3E, PAGE_EXECUTE_READWRITE,
+                            &single_protection) ||
+            !VirtualProtect(group, 0x39, PAGE_EXECUTE_READWRITE,
+                            &group_protection))
+        {
+            if (single_protection)
+            {
+                DWORD ignored = 0;
+                VirtualProtect(single, 0x3E, single_protection, &ignored);
+            }
+            if (log)
+            {
+                fprintf(log,
+                    "GPTP control-group camera VirtualProtect failed: "
+                    "error=%lu\n",
+                    static_cast<unsigned long>(GetLastError()));
+                fclose(log);
+            }
+            gptp_control_group_camera_patch_state =
+                GptpControlGroupCameraPatchState::Incompatible;
+            return;
+        }
+
+        *single_x_compare = expanded_x_center;
+        *single_x_subtract = expanded_x_subtract;
+        *single_y_compare = expanded_y_center;
+        *single_y_subtract = expanded_single_y_subtract;
+        *group_x_compare = expanded_x_center;
+        *group_x_subtract = expanded_x_subtract;
+        *group_y_compare = expanded_y_center;
+        *group_y_subtract = expanded_group_y_subtract;
+        FlushInstructionCache(GetCurrentProcess(), single, 0x3E);
+        FlushInstructionCache(GetCurrentProcess(), group, 0x39);
+        DWORD ignored = 0;
+        VirtualProtect(single, 0x3E, single_protection, &ignored);
+        VirtualProtect(group, 0x39, group_protection, &ignored);
+    }
+
+    if (log)
+    {
+        fprintf(log,
+            "GPTP control-group camera center installed: "
+            "single=%p group=%p center=(%lu,%lu)\n",
+            single, group,
+            static_cast<unsigned long>(expanded_x_center),
+            static_cast<unsigned long>(expanded_y_center));
+        fclose(log);
+    }
+    gptp_control_group_camera_patch_state =
+        GptpControlGroupCameraPatchState::Installed;
+}
+
 void EnsurePresentationCursorGuards()
 {
     if (presentation_cursor_patch_state !=
@@ -2260,6 +2478,7 @@ void PatchDraw(Common::PatchContext *patch)
     // plugin load order permits. Keep BeginStockDrawScreen's call as a
     // fallback for installations where GPTP is loaded after aidebug.
     EnsureGptpInitialCameraCenter();
+    EnsureGptpControlGroupCameraCenter();
     EnsureGptpSelectionBounds();
     PatchInteractionBounds(patch);
     PatchStartLocationCameraOrigin(patch);

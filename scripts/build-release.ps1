@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.4.5'
+    [string]$Version = '0.4.6'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,7 +40,11 @@ $diagnosticMarkers = @(
     'replay_color_capture.txt',
     'replay_color_outer_stock.raw',
     'replay_color_private_0.raw',
-    'replay_color_expanded_world.raw'
+    'replay_color_expanded_world.raw',
+    'worker_ai_capture.log',
+    'worker_ai_repair.log',
+    'ai_production_capture.log',
+    'ai_production_repair.log'
 )
 foreach ($marker in $diagnosticMarkers) {
     if ($rendererText.Contains($marker)) {

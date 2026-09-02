@@ -1464,6 +1464,7 @@ void BeginStockDrawScreen()
     EnsureGptpMinimapViewportBox();
     EnsureGptpUpgradeResearchClear();
     EnsureGptpInitialCameraCenter();
+    EnsureGptpControlGroupCameraCenter();
     EnsurePresentationCursorGuards();
     RepairReplayPlayerColorRamps();
     ++stock_draw_depth;

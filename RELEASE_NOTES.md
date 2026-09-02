@@ -1,4 +1,3 @@
-# StarCraft Cosmonarchy Widescreen 0.4.3
+# StarCraft Cosmonarchy Widescreen 0.4.6
 
-- Fixed Alt-click same-type selection outside the original 4:3 area.
-- Fixed drag selection being canceled when released over the bottom HUD.
+- Fixed control group camera centering.

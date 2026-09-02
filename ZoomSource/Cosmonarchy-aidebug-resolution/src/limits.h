@@ -27,6 +27,7 @@ void EnsureGptpCursorWarpGuard();
 void EnsureGptpMinimapViewportBox();
 void EnsureGptpUpgradeResearchClear();
 void EnsureGptpInitialCameraCenter();
+void EnsureGptpControlGroupCameraCenter();
 void EnsurePresentationCursorGuards();
 
 #endif // LIMIT_H
