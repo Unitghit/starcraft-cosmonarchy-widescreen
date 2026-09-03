@@ -39,7 +39,8 @@ internal sealed class ConfigurationService
             ReadResourceText(ManifestResource),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ??
             throw new InvalidDataException("The embedded compatibility manifest is invalid.");
-        if (manifest.SchemaVersion != 1 || manifest.RendererProfiles.Count == 0)
+        if (manifest.SchemaVersion != 1 || manifest.RendererProfiles.Count == 0 ||
+            manifest.CncDdrawProfiles.Count == 0)
             throw new InvalidDataException("Unsupported compatibility manifest schema.");
         Profiles = manifest.RendererProfiles;
         foreach (var profile in Profiles)
@@ -114,7 +115,11 @@ internal sealed class ConfigurationService
             $"Viewport renderer installed: {width} x {height}." :
             rendererInstalled ? "Universal viewport renderer installed." :
             "Compatible Cosmonarchy installation detected.";
-        return new(true, state);
+        var ddrawHash = File.Exists(Paths.DdrawDllPath) ?
+            HashFile(Paths.DdrawDllPath) : null;
+        var ddraw = DdrawCompatibilityDetector.Classify(
+            ddrawHash, manifest.CncDdrawProfiles);
+        return new(true, state + " " + ddraw.Message);
     }
 
     public bool IsGameRunning() => GetGameProcesses().Count != 0;

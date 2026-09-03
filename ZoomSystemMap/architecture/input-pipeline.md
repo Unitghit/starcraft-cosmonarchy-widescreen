@@ -54,7 +54,9 @@ When a left press begins inside the runtime minimap rectangle at `0x00512D00`,
 the native point persists through the full captured drag because the minimap
 polls between window messages. During that interval the cursor compositor adds
 the derived HUD offset, keeping the visible pointer at its physical location.
-Release, capture loss, cancel mode, or focus loss restores physical ownership.
+Release, cancel mode, focus loss, or capture loss after the physical button is
+up restores physical ownership. A capture-change notification while the button
+is still held does not terminate minimap ownership.
 
 Frame capture showed that minimap polling can alternate cursor layer 0 between
 native and already-relocated rectangle coordinates during one captured press.
@@ -116,12 +118,43 @@ composed frame and prevents a one-frame cursor image at the obsolete 4:3
 position. A captured minimap drag intentionally retains native `g_mouse` plus
 its draw offset until release, then performs the same physical refresh.
 
+GPTP can poll cursor type again between the translated window message and the
+next frame. Final cursor composition temporarily prepares cursor type `0` and
+its GRP whenever the live physical point belongs to the presented HUD and the
+polled type is a gameplay cursor. It draws that temporary layer and restores
+the original cursor state before returning to StarCraft. It never calls
+`SetCursorSprite` at `0x004843F0`, because that function also clears the active
+middle-pan callback at `0x005968AC`.
+Visual cursor ownership is derived from the active race's live STrans mask.
+A four-neighbor flood fill begins at every outer edge of the native HUD region.
+Transparent pixels reached by that fill remain open terrain, while opaque art
+and enclosed transparent panel interiors belong to the HUD. This follows all
+race-specific HUD shapes without fixed component rectangles. Click ownership
+continues to use the fine-grained STrans mask, and middle-button camera panning
+and obsolete native-HUD bypass events never enter cursor substitution.
+
 The local cnc-ddraw presentation shim owns an additional cursor clip and
 position pair. At 2x external presentation scale, its legacy clip corner maps
 to logical client point `(132,474)` and can synchronously clamp a relocated
 minimap click there. The verified `ddraw.dll` imports are routed through the
 same scoped guards; normal presentation input outside translated HUD dispatch
 still forwards to USER32 unchanged.
+
+cnc-ddraw 6.9, 7.0, and 7.1 place those imports at different RVAs. The
+renderer parses the loaded x86 PE import directory, finds the named USER32
+`ClipCursor` and `SetCursorPos` slots, verifies their current targets, and then
+patches only those two slots. Missing names, malformed PE metadata, or
+unexpected targets leave the wrapper untouched and mark the guard
+incompatible.
+
+Suppressing a legacy clip request is not enough on every host. Wine or a Linux
+compositor may retain an older pointer constraint until it receives a new
+screen-space rectangle. A translated minimap press therefore installs the
+actual window client rectangle through the original USER32 import. Subsequent
+legacy clip requests during that drag refresh the same physical rectangle, and
+an explicit unlock is forwarded immediately. This path uses `GetClientRect`
+and `ClientToScreen`, so it follows the real presentation window instead of
+assuming internal resolution coordinates or a particular desktop origin.
 
 ## Middle-mouse camera panning
 

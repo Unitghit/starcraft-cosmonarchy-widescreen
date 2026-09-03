@@ -28,6 +28,12 @@ The QDP loader already contains eight modules, matching MPQDraft's eight-plugin
 limit. Therefore the release must replace and back up the existing
 `aize_debug.qdp`; it must not install a ninth uniquely named QDP.
 
+The configurator compares `ddraw.dll` with tested SHA-256 identities for
+cnc-ddraw 6.9, 7.0, and 7.1 and includes the result in installation status.
+An unknown DLL produces a nonblocking compatibility warning. Runtime support
+remains capability-based because the renderer discovers the required named
+imports instead of selecting a version-specific payload.
+
 ## Resolution separation
 
 Internal presets come from the configurator's embedded
@@ -55,6 +61,7 @@ corresponding raster scale and physical-to-logical mouse mapping.
   value, preserving later user or wrapper changes.
 - Active duplicates are collapsed only for owned keys. Unowned keys, comments,
   sections, and the wrapper DLL are preserved.
+- cnc-ddraw detection is read-only and never changes Save or Restore ownership.
 - Runtime verification records config path, internal size, output size, mode,
   compatibility, and actual client dimensions in
   `fixed_zoom_presentation.log`.

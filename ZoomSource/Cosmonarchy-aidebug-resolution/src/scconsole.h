@@ -151,6 +151,7 @@ bool ShouldHoldExpandedContextHelp();
 uint16_t GetExpandedStatusTooltipControlIndex();
 bool ShouldSuppressTranslatedHudCursorWarp();
 bool IsTranslatedMinimapDragActive();
+bool PresentedHudOwnsCursor();
 
 #endif // SC_CONSOLE_H
 

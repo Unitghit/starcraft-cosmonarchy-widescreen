@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.7, cnc-ddraw compatibility hotfix
+
+- Added compatibility for cnc-ddraw 7.0 and 7.1, including correct minimap dragging.
+- Fixed gameplay cursor graphics appearing over the HUD and minimap.
+
 ## 0.4.6, control group camera hotfix
 
 - Fixed control group camera centering.

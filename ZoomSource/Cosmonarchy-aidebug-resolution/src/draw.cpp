@@ -328,6 +328,52 @@ namespace
 
     void DrawExpandedCursor(uint8_t *destination)
     {
+        // GPTP also polls cursor type between window messages. A poll after
+        // translated HUD dispatch can therefore regenerate a gameplay cursor
+        // from a unit hidden beneath the composited HUD. Correct the final
+        // prepared layer immediately before drawing it, after every possible
+        // poll for this frame. Middle-button camera panning is excluded
+        // because its active cursor state participates in the gesture.
+        const bool presented_hud_owns_cursor = PresentedHudOwnsCursor();
+        const uint32_t cursor_type_before = *bw::cursor_type;
+        void *cursor_grp_before = *bw::current_cursor;
+        const bool substitute_ui_cursor = presented_hud_owns_cursor &&
+            cursor_type_before != 0 && *bw::normal_cursor_graphics != nullptr;
+        DrawLayer saved_cursor_layer = {};
+        int16_t saved_cursor_left = 0;
+        int16_t saved_cursor_top = 0;
+        uint16_t saved_cursor_width = 0;
+        uint16_t saved_cursor_height = 0;
+        if (substitute_ui_cursor)
+        {
+            // Prepare a normal cursor without calling SetCursorSprite. That
+            // function clears middle_pan_move_proc at 0x005968AC. These are
+            // the only cursor inputs and outputs touched by RefreshCursorLayer
+            // at 0x004BE120, so the game state can be restored immediately
+            // after this frame's cursor has been drawn.
+            saved_cursor_layer = bw::draw_layers[0];
+            saved_cursor_left = *bw::cursor_layer_left;
+            saved_cursor_top = *bw::cursor_layer_top;
+            saved_cursor_width = *bw::cursor_layer_width;
+            saved_cursor_height = *bw::cursor_layer_height;
+            *bw::cursor_type = 0;
+            *bw::current_cursor = *bw::normal_cursor_graphics;
+            bw::RefreshCursorLayer();
+        }
+
+        const auto restore_cursor_state = [&]()
+        {
+            if (!substitute_ui_cursor)
+                return;
+            bw::draw_layers[0] = saved_cursor_layer;
+            *bw::cursor_layer_left = saved_cursor_left;
+            *bw::cursor_layer_top = saved_cursor_top;
+            *bw::cursor_layer_width = saved_cursor_width;
+            *bw::cursor_layer_height = saved_cursor_height;
+            *bw::cursor_type = cursor_type_before;
+            *bw::current_cursor = cursor_grp_before;
+        };
+
         DrawLayer &cursor = bw::draw_layers[0];
         const int mouse_x = static_cast<int>(*bw::mouse_clickpos_x);
         const int mouse_y = static_cast<int>(*bw::mouse_clickpos_y);
@@ -339,19 +385,26 @@ namespace
         static uint32_t last_cursor_type = UINT32_MAX;
         static void *last_cursor_grp;
         static int last_native_state = -1;
+        static int last_presented_hud_owner = -1;
         if (cursor_type != last_cursor_type || cursor_grp != last_cursor_grp ||
-            static_cast<int>(inside_native_game) != last_native_state)
+            static_cast<int>(inside_native_game) != last_native_state ||
+            static_cast<int>(presented_hud_owns_cursor) !=
+                last_presented_hud_owner)
         {
             FILE *log = fopen("fixed_zoom_cursor_hover.log", "a");
             if (log)
             {
                 fprintf(log,
-                    "%lu mouse=(%d,%d) type=%lu grp=%p "
+                    "%lu mouse=(%d,%d) hud-owner=%u "
+                    "before=(type=%lu grp=%p) after=(type=%lu grp=%p) "
                     "native-game=%u expanded-game=%u popup=%lu "
-                    "placing=%lu drag=%u layer=(draw=%u pos=%d,%d "
-                    "size=%d,%d)\n",
+                    "placing=%lu drag=%u marker=(%p,%u) "
+                    "layer=(draw=%u pos=%d,%d size=%d,%d)\n",
                     static_cast<unsigned long>(GetTickCount()),
                     mouse_x, mouse_y,
+                    static_cast<unsigned>(presented_hud_owns_cursor),
+                    static_cast<unsigned long>(cursor_type_before),
+                    cursor_grp_before,
                     static_cast<unsigned long>(cursor_type), cursor_grp,
                     static_cast<unsigned>(inside_native_game),
                     static_cast<unsigned>(mouse_x >= 0 && mouse_y >= 0 &&
@@ -360,6 +413,8 @@ namespace
                     static_cast<unsigned long>(*bw::popup_dialog_active),
                     static_cast<unsigned long>(*bw::is_placing_building),
                     static_cast<unsigned>(*bw::is_drag_selecting),
+                    static_cast<void *>(*bw::cursor_marker),
+                    static_cast<unsigned>(*bw::draw_cursor_marker),
                     static_cast<unsigned>(cursor.draw),
                     static_cast<int>(cursor.area.left),
                     static_cast<int>(cursor.area.top),
@@ -370,6 +425,8 @@ namespace
             last_cursor_type = cursor_type;
             last_cursor_grp = cursor_grp;
             last_native_state = static_cast<int>(inside_native_game);
+            last_presented_hud_owner = static_cast<int>(
+                presented_hud_owns_cursor);
         }
         // The native framebuffer retains an already-rasterized cursor when
         // StarCraft temporarily clears the layer redraw flag. Our expanded
@@ -377,7 +434,10 @@ namespace
         // throughout a captured minimap drag or the pointer disappears for a
         // frame on press.
         if ((!cursor.draw && !IsTranslatedMinimapDragActive()) || !cursor.Draw)
+        {
+            restore_cursor_state();
             return;
+        }
 
         // The stock cursor rasterizer already clips against current_canvas,
         // so give it the final output surface rather than the native private
@@ -425,6 +485,7 @@ namespace
                        -draw_cursor_offset_y,
                        cursor.func_param, &param);
         *bw::current_canvas = saved_canvas;
+        restore_cursor_state();
     }
 
     void DrawExpandedContextHelp(uint8_t *destination)

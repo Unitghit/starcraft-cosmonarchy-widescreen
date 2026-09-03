@@ -1690,6 +1690,112 @@ namespace {
                 resolution::native_hud_top));
     }
 
+    bool NativeHudCursorMaskContains(int native_x, int native_y)
+    {
+        // Build semantic cursor ownership from the active race's live STrans
+        // mask. Flooding transparent pixels inward from every outer edge
+        // distinguishes genuinely open terrain from transparent holes inside
+        // the minimap, status, portrait, and command panels.
+        constexpr int mask_top = 290;
+        constexpr int mask_width =
+            static_cast<int>(resolution::native_width);
+        constexpr int mask_height =
+            static_cast<int>(resolution::native_height) - mask_top;
+        constexpr int mask_cells = mask_width * mask_height;
+        static uint8_t mask[mask_cells] = {};
+        static uint32_t queue[mask_cells] = {};
+        static void *cached_trans_list = nullptr;
+        static uint8_t cached_race = 0xff;
+        static int cached_y_min = INT_MIN;
+        static int cached_y_max = INT_MIN;
+        static bool cache_valid = false;
+
+        if (native_x < 0 || native_x >= mask_width ||
+            native_y < mask_top ||
+            native_y >= static_cast<int>(resolution::native_height) ||
+            !*bw::trans_list)
+        {
+            return false;
+        }
+
+        const uint32_t local_player = *bw::local_player_id;
+        const uint8_t race = local_player < 12 ?
+            bw::players[local_player].race : *bw::player_race;
+        void *const trans_list = *bw::trans_list;
+        const int trans_y_min = *bw::trans_mouse_y_min;
+        const int trans_y_max = *bw::trans_mouse_y_max;
+        if (!cache_valid || cached_trans_list != trans_list ||
+            cached_race != race || cached_y_min != trans_y_min ||
+            cached_y_max != trans_y_max)
+        {
+            for (int y = 0; y < mask_height; ++y)
+            {
+                const int source_y = y + mask_top;
+                for (int x = 0; x < mask_width; ++x)
+                {
+                    bool opaque = NativeMaskConsumesInput(x, source_y);
+                    // The Terran-only lower-left ornament is deliberately
+                    // omitted by the compositor. Protoss and Zerg retain it
+                    // as part of their minimap surround. Other race masks are
+                    // accepted directly from their live STrans geometry.
+                    if (x <= 22 && source_y >= 293 && source_y <= 313 &&
+                        race != Race::Zerg && race != Race::Protoss)
+                    {
+                        opaque = false;
+                    }
+                    mask[y * mask_width + x] = opaque ? 1 : 0;
+                }
+            }
+
+            uint32_t queue_read = 0;
+            uint32_t queue_write = 0;
+            const auto enqueue_exterior = [&](int x, int y)
+            {
+                const uint32_t index = static_cast<uint32_t>(
+                    y * mask_width + x);
+                if (mask[index] == 0)
+                {
+                    mask[index] = 2;
+                    queue[queue_write++] = index;
+                }
+            };
+            for (int x = 0; x < mask_width; ++x)
+            {
+                enqueue_exterior(x, 0);
+                enqueue_exterior(x, mask_height - 1);
+            }
+            for (int y = 1; y < mask_height - 1; ++y)
+            {
+                enqueue_exterior(0, y);
+                enqueue_exterior(mask_width - 1, y);
+            }
+            while (queue_read < queue_write)
+            {
+                const uint32_t index = queue[queue_read++];
+                const int x = static_cast<int>(index % mask_width);
+                const int y = static_cast<int>(index / mask_width);
+                if (x > 0)
+                    enqueue_exterior(x - 1, y);
+                if (x + 1 < mask_width)
+                    enqueue_exterior(x + 1, y);
+                if (y > 0)
+                    enqueue_exterior(x, y - 1);
+                if (y + 1 < mask_height)
+                    enqueue_exterior(x, y + 1);
+            }
+
+            cached_trans_list = trans_list;
+            cached_race = race;
+            cached_y_min = trans_y_min;
+            cached_y_max = trans_y_max;
+            cache_valid = true;
+        }
+
+        // State 1 is opaque HUD art. State 0 is an enclosed transparent panel
+        // interior. State 2 is transparent space connected to open terrain.
+        return mask[(native_y - mask_top) * mask_width + native_x] != 2;
+    }
+
     // The Game Menu button is a transparent 71x19 control whose exact native
     // bounds were verified from its live BinDlg. It must participate in input
     // routing even where the STrans artwork mask is transparent.
@@ -2473,6 +2579,22 @@ bool IsTranslatedMinimapDragActive()
     return translated_minimap_drag_active;
 }
 
+bool PresentedHudOwnsCursor()
+{
+    if (!is_in_game() || !latest_physical_mouse_valid ||
+        *bw::popup_dialog_active != 0 || IsExpandedMiddlePanActive())
+    {
+        return false;
+    }
+
+    const int native_x = latest_physical_mouse_x -
+        static_cast<int>(resolution::hud_left);
+    const int native_y = latest_physical_mouse_y -
+        static_cast<int>(resolution::hud_top -
+            resolution::native_hud_top);
+    return NativeHudCursorMaskContains(native_x, native_y);
+}
+
 LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     // Front-end menus are rendered natively at 640x480 and aspect-fitted into
     // the output. Invert that presentation transform before StarCraft's
@@ -2649,6 +2771,11 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
                             mouse_y >= minimap.top &&
                             mouse_y < minimap.bottom;
                         if (translated_minimap_drag_active) {
+                            // Replace any stale native pointer constraint at
+                            // drag start. Some Wine compositor paths retain
+                            // the old minimap-era clip until a new physical
+                            // screen-space rectangle is installed.
+                            ApplyExpandedMinimapDragClip(hwnd);
                             FILE *log = fopen("fixed_zoom_input.log", "a");
                             if (log) {
                                 fprintf(log,
@@ -2878,10 +3005,10 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         else {
             // Native dispatch has already rebuilt cursor layer 0 using the
             // forwarded 640x480 coordinate. Writing the expanded g_mouse
-            // values back does not rebuild that layer by itself. Run the
-            // engine's own cursor refresh after the restore so the very next
-            // composed frame uses the physical position instead of flashing
-            // the stale native cursor for one frame.
+            // values back does not rebuild that layer by itself. Refresh the
+            // layer at the physical point. Cursor-type substitution is a
+            // presentation-only operation in DrawExpandedCursor; mutating it
+            // here would also clear StarCraft's middle-pan callback.
             bw::RefreshCursorLayer();
             SetExpandedCursorOffset(0, 0);
         }
@@ -2920,7 +3047,10 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         expanded_battlefield_drag_active = false;
         translated_minimap_drag_active = false;
     }
-    if (msg == WM_CANCELMODE || msg == WM_CAPTURECHANGED ||
+    const bool capture_lost_with_button_up =
+        msg == WM_CAPTURECHANGED &&
+        (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0;
+    if (msg == WM_CANCELMODE || capture_lost_with_button_up ||
         msg == WM_KILLFOCUS) {
         translated_hud_drag_active = false;
         expanded_battlefield_drag_active = false;

@@ -70,6 +70,15 @@ internal sealed record ViewportSettings(
 
 internal sealed record ValidationResult(bool Success, string Message);
 
+internal sealed record DdrawCompatibilityProfile(
+    string Version,
+    string Sha256);
+
+internal sealed record DdrawCompatibilityResult(
+    bool Detected,
+    bool Tested,
+    string Message);
+
 internal sealed class DdrawOwnedSettingState
 {
     public bool OriginalPresent { get; init; }
@@ -95,6 +104,7 @@ internal sealed record CompatibilityManifest(
     string GptpSha256,
     string HotloaderSha256,
     string OriginalRendererSha256,
+    IReadOnlyList<DdrawCompatibilityProfile> CncDdrawProfiles,
     IReadOnlyList<RendererProfile> RendererProfiles);
 
 internal sealed class InstallationPaths
@@ -116,6 +126,7 @@ internal sealed class InstallationPaths
     public string HotloaderPath => Path.Combine(PluginsDirectory, "_qdp-hotloader.qdp");
     public string StarCraftDirectory => Path.Combine(WorkspaceDirectory, "Starcraft");
     public string StarCraftPath => Path.Combine(StarCraftDirectory, "StarCraft.exe");
+    public string DdrawDllPath => Path.Combine(StarCraftDirectory, "ddraw.dll");
     public string DdrawPath => Path.Combine(StarCraftDirectory, "ddraw.ini");
     public string ViewportConfigPath =>
         Path.Combine(ReleaseDirectory, "cosmonarchy_viewport.ini");

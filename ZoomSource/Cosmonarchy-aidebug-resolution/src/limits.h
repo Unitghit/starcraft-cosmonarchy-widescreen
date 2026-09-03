@@ -19,6 +19,7 @@ inline bool is_active_player(int player) { return player >= 0 && player < Limits
 void RemoveLimits(Common::PatchContext *patch);
 void PatchDraw(Common::PatchContext *patch);
 void PrepareExpandedDragClip();
+void ApplyExpandedMinimapDragClip(void *window);
 bool IsExpandedMiddlePanActive();
 void EnsureGptpPlacementBounds();
 void EnsureGptpCursorHoverBounds();

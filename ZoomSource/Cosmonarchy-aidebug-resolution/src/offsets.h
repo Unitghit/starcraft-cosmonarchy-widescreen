@@ -266,6 +266,11 @@ namespace bw
     // Cursor state selected by get_cursor_type and the active cursor GRP.
     const offset<uint32_t> cursor_type = 0x00596B70;
     const offset<void *> current_cursor = 0x00597394;
+    const offset<void *> normal_cursor_graphics = 0x00596B20;
+    const offset<int16_t> cursor_layer_left = 0x006CEF52;
+    const offset<int16_t> cursor_layer_top = 0x006CEF54;
+    const offset<uint16_t> cursor_layer_width = 0x006CEF56;
+    const offset<uint16_t> cursor_layer_height = 0x006CEF58;
     // Input callback installed as 0x00484460 by native middle-button down and
     // cleared by native middle-button up after the gesture has fully ended.
     const offset<void *> middle_pan_move_proc = 0x005968AC;

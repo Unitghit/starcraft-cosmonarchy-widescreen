@@ -243,6 +243,149 @@ namespace
     typedef BOOL (WINAPI *SetCursorPosFunction)(int, int);
     SetCursorPosFunction original_set_cursor_pos;
 
+    template <typename Function>
+    Function *FindNamedImportSlot(HMODULE module, const char *dll_name,
+                                  const char *function_name)
+    {
+        static_assert(sizeof(Function) == sizeof(uint32_t),
+            "The viewport renderer supports only the x86 import layout");
+        if (!module || !dll_name || !function_name)
+            return nullptr;
+
+        uint8_t *base = reinterpret_cast<uint8_t *>(module);
+        const IMAGE_DOS_HEADER *dos =
+            reinterpret_cast<const IMAGE_DOS_HEADER *>(base);
+        if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0)
+            return nullptr;
+
+        const IMAGE_NT_HEADERS32 *nt =
+            reinterpret_cast<const IMAGE_NT_HEADERS32 *>(
+                base + dos->e_lfanew);
+        if (nt->Signature != IMAGE_NT_SIGNATURE ||
+            nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC)
+        {
+            return nullptr;
+        }
+
+        const uint32_t image_size = nt->OptionalHeader.SizeOfImage;
+        const auto rva_is_valid = [image_size](uint32_t rva, size_t size)
+        {
+            return rva != 0 && rva < image_size &&
+                size <= static_cast<size_t>(image_size - rva);
+        };
+        const IMAGE_DATA_DIRECTORY &directory =
+            nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+        if (!rva_is_valid(directory.VirtualAddress,
+                          sizeof(IMAGE_IMPORT_DESCRIPTOR)))
+        {
+            return nullptr;
+        }
+
+        const IMAGE_IMPORT_DESCRIPTOR *imports =
+            reinterpret_cast<const IMAGE_IMPORT_DESCRIPTOR *>(
+                base + directory.VirtualAddress);
+        const size_t descriptor_limit = directory.Size /
+            sizeof(IMAGE_IMPORT_DESCRIPTOR);
+        for (size_t descriptor_index = 0;
+            descriptor_index < descriptor_limit; ++descriptor_index)
+        {
+            const IMAGE_IMPORT_DESCRIPTOR &descriptor =
+                imports[descriptor_index];
+            if (descriptor.Name == 0)
+                break;
+            if (!rva_is_valid(descriptor.Name, 1))
+                return nullptr;
+            const char *imported_dll =
+                reinterpret_cast<const char *>(base + descriptor.Name);
+            if (_stricmp(imported_dll, dll_name) != 0)
+                continue;
+            if (descriptor.OriginalFirstThunk == 0 ||
+                !rva_is_valid(descriptor.OriginalFirstThunk,
+                    sizeof(IMAGE_THUNK_DATA32)) ||
+                !rva_is_valid(descriptor.FirstThunk,
+                    sizeof(IMAGE_THUNK_DATA32)))
+            {
+                return nullptr;
+            }
+
+            const IMAGE_THUNK_DATA32 *names =
+                reinterpret_cast<const IMAGE_THUNK_DATA32 *>(
+                    base + descriptor.OriginalFirstThunk);
+            IMAGE_THUNK_DATA32 *slots =
+                reinterpret_cast<IMAGE_THUNK_DATA32 *>(
+                    base + descriptor.FirstThunk);
+            const size_t name_limit =
+                (image_size - descriptor.OriginalFirstThunk) /
+                    sizeof(IMAGE_THUNK_DATA32);
+            const size_t slot_limit =
+                (image_size - descriptor.FirstThunk) /
+                    sizeof(IMAGE_THUNK_DATA32);
+            const size_t thunk_limit = name_limit < slot_limit ?
+                name_limit : slot_limit;
+            for (size_t thunk_index = 0;
+                thunk_index < thunk_limit; ++thunk_index)
+            {
+                const uint32_t name_value = names[thunk_index].u1.Ordinal;
+                if (name_value == 0)
+                    break;
+                if (IMAGE_SNAP_BY_ORDINAL32(name_value))
+                    continue;
+                if (!rva_is_valid(name_value,
+                    sizeof(IMAGE_IMPORT_BY_NAME)))
+                {
+                    return nullptr;
+                }
+                const IMAGE_IMPORT_BY_NAME *import_name =
+                    reinterpret_cast<const IMAGE_IMPORT_BY_NAME *>(
+                        base + name_value);
+                if (strcmp(reinterpret_cast<const char *>(
+                        import_name->Name), function_name) == 0)
+                {
+                    return reinterpret_cast<Function *>(
+                        &slots[thunk_index].u1.Function);
+                }
+            }
+            return nullptr;
+        }
+        return nullptr;
+    }
+
+    template <typename Function>
+    bool ReplaceImportSlot(Function *slot, Function replacement)
+    {
+        if (!slot || !replacement)
+            return false;
+        DWORD old_protection = 0;
+        if (!VirtualProtect(slot, sizeof(*slot), PAGE_READWRITE,
+                            &old_protection))
+        {
+            return false;
+        }
+        *slot = replacement;
+        FlushInstructionCache(GetCurrentProcess(), slot, sizeof(*slot));
+        DWORD ignored = 0;
+        VirtualProtect(slot, sizeof(*slot), old_protection, &ignored);
+        return true;
+    }
+
+    bool GetClientScreenRect(HWND hwnd, RECT *rect)
+    {
+        if (!hwnd || !rect || !GetClientRect(hwnd, rect))
+            return false;
+
+        POINT top_left = { rect->left, rect->top };
+        POINT bottom_right = { rect->right, rect->bottom };
+        if (!ClientToScreen(hwnd, &top_left) ||
+            !ClientToScreen(hwnd, &bottom_right))
+            return false;
+
+        rect->left = top_left.x;
+        rect->top = top_left.y;
+        rect->right = bottom_right.x;
+        rect->bottom = bottom_right.y;
+        return rect->right > rect->left && rect->bottom > rect->top;
+    }
+
     BOOL WINAPI SetCursorPosExpandedHudGuard(int x, int y)
     {
         if (ShouldSuppressTranslatedHudCursorWarp())
@@ -275,6 +418,21 @@ namespace
     {
         if (ShouldSuppressTranslatedHudCursorWarp())
         {
+            // A compositor may keep an earlier native 640x480 pointer
+            // constraint active even after later ClipCursor calls are
+            // suppressed. During a relocated minimap drag, replace it with
+            // the real client bounds. Honor an explicit unlock so the full
+            // client constraint cannot survive the button release.
+            if (IsTranslatedMinimapDragActive() && original_clip_cursor)
+            {
+                if (!requested)
+                    return original_clip_cursor(nullptr);
+
+                RECT client_screen = {};
+                HWND hwnd = static_cast<HWND>(*bw::main_window_hwnd);
+                if (GetClientScreenRect(hwnd, &client_screen))
+                    return original_clip_cursor(&client_screen);
+            }
             static DWORD last_suppressed_log_tick;
             const DWORD now = GetTickCount();
             if (now - last_suppressed_log_tick >= 250)
@@ -2337,29 +2495,29 @@ void EnsurePresentationCursorGuards()
 
     // The local cnc-ddraw presentation shim owns another pair of cursor APIs.
     // A translated native HUD click can make its legacy ClipCursor rectangle
-    // synchronously clamp the physical pointer to the old window corner. Keep
-    // these guards scoped by ConsoleWndProc exactly like the engine imports.
-    constexpr uintptr_t clip_iat_rva = 0x0003C330;
-    constexpr uintptr_t cursor_iat_rva = 0x0003C34C;
-    constexpr uintptr_t clip_thunk_rva = 0x000261CC;
-    constexpr uintptr_t cursor_thunk_rva = 0x000261A2;
-    uint8_t *base = reinterpret_cast<uint8_t *>(module);
-    ClipCursorFunction *clip_iat =
-        reinterpret_cast<ClipCursorFunction *>(base + clip_iat_rva);
+    // synchronously clamp the physical pointer to the old window corner. The
+    // IAT layout changed after cnc-ddraw 6.9, so resolve the named USER32
+    // imports from the loaded PE rather than relying on version-specific RVAs.
+    ClipCursorFunction *clip_iat = FindNamedImportSlot<ClipCursorFunction>(
+        module, "USER32.dll", "ClipCursor");
     SetCursorPosFunction *cursor_iat =
-        reinterpret_cast<SetCursorPosFunction *>(base + cursor_iat_rva);
-    uint8_t *clip_thunk = base + clip_thunk_rva;
-    uint8_t *cursor_thunk = base + cursor_thunk_rva;
-
-    uintptr_t clip_operand = 0;
-    uintptr_t cursor_operand = 0;
-    memcpy(&clip_operand, clip_thunk + 2, sizeof(uint32_t));
-    memcpy(&cursor_operand, cursor_thunk + 2, sizeof(uint32_t));
-    const bool signature_matches =
-        clip_thunk[0] == 0xFF && clip_thunk[1] == 0x25 &&
-        cursor_thunk[0] == 0xFF && cursor_thunk[1] == 0x25 &&
-        clip_operand == reinterpret_cast<uintptr_t>(clip_iat) &&
-        cursor_operand == reinterpret_cast<uintptr_t>(cursor_iat);
+        FindNamedImportSlot<SetCursorPosFunction>(
+            module, "USER32.dll", "SetCursorPos");
+    if (!clip_iat || !cursor_iat)
+    {
+        FILE *log = fopen("fixed_zoom_renderer.log", "a");
+        if (log)
+        {
+            fprintf(log,
+                "presentation cursor import discovery failed: module=%p "
+                "ClipCursor=%p SetCursorPos=%p\n",
+                module, clip_iat, cursor_iat);
+            fclose(log);
+        }
+        presentation_cursor_patch_state =
+            PresentationCursorPatchState::Incompatible;
+        return;
+    }
     const ClipCursorFunction current_clip = *clip_iat;
     const SetCursorPosFunction current_cursor = *cursor_iat;
     const bool imports_match =
@@ -2369,16 +2527,15 @@ void EnsurePresentationCursorGuards()
          current_cursor == SetCursorPosExpandedHudGuard);
 
     FILE *log = fopen("fixed_zoom_renderer.log", "a");
-    if (!signature_matches || !imports_match)
+    if (!imports_match)
     {
         if (log)
         {
             fprintf(log,
                 "presentation cursor guards preflight failed: module=%p "
-                "signature=%u clip=(iat=%p current=%p expected=%p) "
+                "clip=(iat=%p current=%p expected=%p) "
                 "cursor=(iat=%p current=%p expected=%p)\n",
-                module, static_cast<unsigned>(signature_matches),
-                clip_iat, reinterpret_cast<void *>(current_clip),
+                module, clip_iat, reinterpret_cast<void *>(current_clip),
                 reinterpret_cast<void *>(original_clip_cursor),
                 cursor_iat, reinterpret_cast<void *>(current_cursor),
                 reinterpret_cast<void *>(original_set_cursor_pos));
@@ -2392,17 +2549,26 @@ void EnsurePresentationCursorGuards()
     if (current_clip != ClipCursorExpanded ||
         current_cursor != SetCursorPosExpandedHudGuard)
     {
-        DWORD old_protection = 0;
-        uint8_t *iat_start = base + clip_iat_rva;
-        constexpr size_t iat_span = cursor_iat_rva - clip_iat_rva +
-            sizeof(SetCursorPosFunction);
-        if (!VirtualProtect(iat_start, iat_span, PAGE_READWRITE,
-                            &old_protection))
+        if (!ReplaceImportSlot(clip_iat, ClipCursorExpanded))
         {
             if (log)
             {
                 fprintf(log,
-                    "presentation cursor IAT VirtualProtect failed: "
+                    "presentation ClipCursor import patch failed: error=%lu\n",
+                    static_cast<unsigned long>(GetLastError()));
+                fclose(log);
+            }
+            presentation_cursor_patch_state =
+                PresentationCursorPatchState::Incompatible;
+            return;
+        }
+        if (!ReplaceImportSlot(cursor_iat, SetCursorPosExpandedHudGuard))
+        {
+            ReplaceImportSlot(clip_iat, current_clip);
+            if (log)
+            {
+                fprintf(log,
+                    "presentation SetCursorPos import patch failed: "
                     "error=%lu\n",
                     static_cast<unsigned long>(GetLastError()));
                 fclose(log);
@@ -2411,11 +2577,6 @@ void EnsurePresentationCursorGuards()
                 PresentationCursorPatchState::Incompatible;
             return;
         }
-        *clip_iat = ClipCursorExpanded;
-        *cursor_iat = SetCursorPosExpandedHudGuard;
-        FlushInstructionCache(GetCurrentProcess(), iat_start, iat_span);
-        DWORD ignored = 0;
-        VirtualProtect(iat_start, iat_span, old_protection, &ignored);
     }
 
     if (log)
@@ -2460,6 +2621,16 @@ void PrepareExpandedDragClip()
             static_cast<long>(expanded_drag_clip_rect.bottom));
         fclose(log);
     }
+}
+
+void ApplyExpandedMinimapDragClip(void *window)
+{
+    if (!original_clip_cursor)
+        return;
+
+    RECT client_screen = {};
+    if (GetClientScreenRect(static_cast<HWND>(window), &client_screen))
+        original_clip_cursor(&client_screen);
 }
 
 Common::PatchManager *patch_mgr;

@@ -50,6 +50,10 @@ before declaring a resolution build stable.
       external presentation.
 - [ ] Drag-selection rectangle appears once at the physical cursor bounds.
 - [ ] Cursor graphic appears once and remains aligned over HUD and battlefield.
+- [ ] Hovering the HUD or minimap keeps the normal UI cursor even when a unit
+      or building is visible underneath that screen position.
+- [ ] Leaving the HUD or minimap immediately restores unit, building,
+      placement, and command cursor states over the battlefield.
 
 ## Input
 
@@ -74,6 +78,15 @@ before declaring a resolution build stable.
       physical cursor into the obsolete 4:3 HUD.
 - [ ] Holding left mouse and dragging across the minimap continuously moves the
       camera while the cursor stays beneath the pointer.
+- [ ] Repeat minimap click, held drag, and release tests with official
+      cnc-ddraw 6.9, 7.0, and 7.1. Confirm import discovery succeeds for each.
+- [ ] The configurator reports 6.9, 7.0, and 7.1 as supported while leaving
+      `ddraw.dll` byte-for-byte unchanged through Save and Restore.
+- [ ] An unknown `ddraw.dll` produces an unverified warning without blocking
+      settings or replacing the DLL.
+- [ ] Repeat the held minimap drag under Wine. Confirm the pointer can traverse
+      the complete relocated minimap and does not jump toward the obsolete
+      native minimap when the button is released.
 - [ ] The minimap's white camera outline represents the full internal
       battlefield viewport and has the correct aspect at map edges.
 - [ ] Starting a match on a differently sized map recalculates the minimap

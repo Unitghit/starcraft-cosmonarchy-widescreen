@@ -8,6 +8,9 @@ var tests = new (string Name, Action Run)[]
     ("restore preserves a later user change", RestorePreservesLaterUserChange),
     ("restore removes a newly introduced key", RestoreRemovesNewlyIntroducedKey),
     ("other sections remain untouched", OtherSectionsRemainUntouched),
+    ("known cnc-ddraw is supported", KnownCncDdrawIsSupported),
+    ("unknown ddraw remains nonblocking", UnknownDdrawRemainsNonblocking),
+    ("missing ddraw is reported", MissingDdrawIsReported),
 };
 
 foreach (var test in tests)
@@ -80,6 +83,33 @@ static void OtherSectionsRemainUntouched()
         });
     Contains(output, "[ddraw]\nwidth=1280");
     Contains(output, "[game]\nwidth=999\ncustom=keep");
+}
+
+static void KnownCncDdrawIsSupported()
+{
+    var result = DdrawCompatibilityDetector.Classify(
+        "abcdef", new[] { new DdrawCompatibilityProfile("7.1", "ABCDEF") });
+    True(result.Detected, "Known cnc-ddraw was not detected.");
+    True(result.Tested, "Known cnc-ddraw was not marked as tested.");
+    Contains(result.Message, "7.1");
+}
+
+static void UnknownDdrawRemainsNonblocking()
+{
+    var result = DdrawCompatibilityDetector.Classify(
+        "123456", new[] { new DdrawCompatibilityProfile("7.1", "ABCDEF") });
+    True(result.Detected, "Unknown ddraw.dll was not detected.");
+    True(!result.Tested, "Unknown ddraw.dll was marked as tested.");
+    Contains(result.Message, "unverified");
+}
+
+static void MissingDdrawIsReported()
+{
+    var result = DdrawCompatibilityDetector.Classify(
+        null, Array.Empty<DdrawCompatibilityProfile>());
+    True(!result.Detected, "Missing ddraw.dll was reported as detected.");
+    True(!result.Tested, "Missing ddraw.dll was reported as tested.");
+    Contains(result.Message, "No local ddraw.dll");
 }
 
 static Dictionary<string, DdrawOwnedSettingState> State(

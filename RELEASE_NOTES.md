@@ -1,3 +1,4 @@
-# StarCraft Cosmonarchy Widescreen 0.4.6
+# StarCraft Cosmonarchy Widescreen 0.4.7
 
-- Fixed control group camera centering.
+- Added compatibility for cnc-ddraw 7.0 and 7.1, including correct minimap dragging.
+- Fixed gameplay cursor graphics appearing over the HUD and minimap.

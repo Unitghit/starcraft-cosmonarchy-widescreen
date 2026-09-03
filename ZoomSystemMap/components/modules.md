@@ -61,6 +61,12 @@ display it at an independently configured rational or fitted client size.
 Physical surface pitch must always
 be taken from the SDraw lock result.
 
+The renderer discovers cnc-ddraw's named USER32 `ClipCursor` and
+`SetCursorPos` import slots from the loaded PE image. It does not depend on
+version-specific RVAs. Official cnc-ddraw 6.9, 7.0, and 7.1 are confirmed
+targets. Unknown wrappers fail the import preflight safely without modifying
+their binary.
+
 ## presentation subsystem
 
 Default configuration: `ZoomSource\zoom_presentation.h`
@@ -89,7 +95,8 @@ presentation configuration, updates owned cnc-ddraw keys transactionally, and
 backs up/restores the pre-install aidebug file. Its installation state tracks
 original and applied values for each owned ddraw key, allowing Restore to
 preserve later user changes and unrelated wrapper configuration. It never
-writes GPTP or `ddraw.dll`.
+writes GPTP or `ddraw.dll`. It hashes a present `ddraw.dll` only to report
+whether the installed cnc-ddraw version is tested or unverified.
 
 ## Load-order rule
 
