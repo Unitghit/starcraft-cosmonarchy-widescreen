@@ -1,5 +1,17 @@
 # Release checklist
 
+## v0.5.1 verification, 2026-09-05
+
+- The user confirmed that blocked regions could no longer be found after
+  repeated zooming and order clicks on the installed hotfix candidate.
+- Native routing tests cover 1,329,132 points and the captured 350% zoom case.
+  Existing geometry, zoom, HUD, selection ABI and graphics tests pass.
+- Runtime diagnostics remain compiled out. External capture tools are stopped
+  and their local artifacts are excluded from the build and source control.
+- The full release build gate passes, including panning, GUI, OpenGL/D3D9/GDI,
+  diagnostic exclusion and the five-file release bundle allowlist. Historical platform
+  coverage does not imply new Linux/macOS interactive testing for this hotfix.
+
 ## v0.5.0 verification, 2026-09-04
 
 - Release renderer and configurator builds pass. Existing upstream C++/FreeType

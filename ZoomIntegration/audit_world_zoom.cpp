@@ -11,6 +11,8 @@ static DWORD AuditGetTickCount() { return audit_tick; }
 #define GetTickCount AuditGetTickCount
 #include "../ZoomSource/Cosmonarchy-aidebug-resolution/src/world_zoom.cpp"
 #undef GetTickCount
+#include "../ZoomSource/Cosmonarchy-aidebug-resolution/src/gameplay_input.h"
+#include "../ZoomSource/Cosmonarchy-aidebug-resolution/src/ui_scale.h"
 
 static int failures = 0;
 static void Check(bool passed, const char* contract)
@@ -48,6 +50,66 @@ static void Settle(unsigned units, uint32_t camera_x = 2000,
 
 int main()
 {
+    // The native dialog mask must see exactly the same point as dispatch.
+    // A deliberately solid native bottom-row panel models an invisible UI
+    // control. The engine's real race-specific STrans predicate is injected
+    // by ConsoleWndProc; no replacement mask is shipped in the renderer.
+    const auto native_panel = [](int x, int y) {
+        return x >= 0 && x < 640 && y >= 400 && y < 480;
+    };
+    bool routing_good = true, edge_good = true, hud_good = true;
+    unsigned missed_old_hits = 0, unnecessary_old_hits = 0, routed_points = 0;
+    for (unsigned width : {640u, 1280u, 1920u, 2560u, 3840u})
+    for (unsigned zoom : {10000u, 12500u, 15000u, 20000u, 35000u, 60000u, 120000u})
+    for (unsigned camera : {0u, 158u, 2000u, 7000u})
+    {
+        const unsigned height = width == 640 ? 480 : width * 9 / 16;
+        Reset(width, height);
+        Settle(zoom, camera, camera);
+        ui_scale::Configure(width, height, 720, 720, false);
+        for (int y = 2; y < static_cast<int>(height) - 2; y += 17)
+        for (int x = 2; x < static_cast<int>(width) - 2; x += 19)
+        {
+            const auto expected = world_zoom::PresentedToSource(x, y);
+            const auto routed = gameplay_input::RouteBattlefield(x, y, native_panel);
+            routing_good &= routed.point.x == expected.x && routed.point.y == expected.y &&
+                routed.hidden_native_hud == native_panel(expected.x, expected.y);
+            missed_old_hits += routed.hidden_native_hud && !native_panel(x, y);
+            unnecessary_old_hits += !routed.hidden_native_hud && native_panel(x, y);
+            ++routed_points;
+        }
+        // The actual visible HUD remains presentation-owned regardless of
+        // how a battlefield point at the same coordinates would be routed.
+        const int hud_x = ui_scale::hud.left + ui_scale::hud.width / 2;
+        const int hud_y = height - 10;
+        hud_good &= ui_scale::hud.NativeX(hud_x) >= 0 && ui_scale::hud.NativeX(hud_x) < 640 &&
+            ui_scale::hud.NativeY(hud_y) >= 400 && ui_scale::hud.NativeY(hud_y) < 480;
+        for (int x : {0, 1, static_cast<int>(width) - 2, static_cast<int>(width) - 1})
+        {
+            const auto edge = gameplay_input::RouteBattlefield(x, 450, native_panel);
+            const int expected_x = world_zoom::Active() ?
+                (x <= 1 ? 0 : static_cast<int>(width) - 1) : x;
+            edge_good &= edge.point.x == expected_x &&
+                edge.hidden_native_hud == native_panel(edge.point.x, edge.point.y);
+        }
+        edge_good &= gameplay_input::RouteBattlefield(100, 0, native_panel).point.y == 0;
+    }
+    std::printf("Battlefield routing: %u points, %u legacy missed hits, %u legacy false hits\n",
+        routed_points, missed_old_hits, unnecessary_old_hits);
+    Check(routing_good, "obsolete HUD mask uses the actual zoom-source dispatch point");
+    Check(missed_old_hits != 0 && unnecessary_old_hits != 0,
+        "baseline raw-coordinate test both misses invisible HUD blocks and bypasses unrelated points");
+    Check(edge_good, "native edge-scroll coordinates and mask classification agree");
+    Check(hud_good, "resized visible HUD ownership stays in presentation space");
+    Reset(1920, 1080);
+    Settle(35000);
+    // Crop and pointer recorded by the external read-only v0.5.0 capture.
+    world_zoom::transform = {158, 315, 548, 308};
+    world_zoom::RebuildLookup();
+    const auto captured = gameplay_input::RouteBattlefield(181, 542, native_panel);
+    Check(captured.point.x == 209 && captured.point.y == 469 &&
+          captured.hidden_native_hud && !native_panel(181, 542),
+          "captured 350-percent crop reproduces the missed native HUD collision");
     bool selection_good=true;
     for(unsigned width : {1280u,1920u,3840u})
     for(unsigned zoom : {10000u,12500u,15000u,20000u,40000u})

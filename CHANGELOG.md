@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1, zoom input hotfix
+
+- Fixed invisible areas blocking unit orders while zoomed in.
+
 ## 0.5.0, zoom and UI sizing
 
 - Added optional mouse-wheel zoom with smooth or instant transitions and extra zoom-in range.

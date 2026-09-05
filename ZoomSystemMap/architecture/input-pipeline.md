@@ -90,10 +90,17 @@ native-UI offset. The HUD remains at its normal bottom position.
 ### Invisible native HUD copy
 
 StarCraft's native dialog tree still exists at its old 640x480 location. A
-physical battlefield click can therefore collide with an invisible button or
-minimap. The window procedure detects solid obsolete-HUD pixels and sends a
+gameplay-dispatch point can therefore collide with an invisible button or
+minimap. For left/right clicks, `gameplay_input::RouteBattlefield` tests the
+obsolete mask **after** zoom conversion, using the same source point forwarded
+to the game. Visible HUD ownership remains a separate presentation-space test.
+The window procedure detects solid obsolete-HUD pixels and sends a
 temporary expanded-only decoy point through dialog hit testing. The wrapped
-gameplay callback replaces the event point with the original physical point.
+gameplay callback replaces the event point with the intended source point.
+Zoomed bypasses retain their cursor transform instead of falling through the
+native-UI cursor reset. Middle-pan initialization retains its previous bypass
+policy because it does not use the left/right callback wrappers.
+See the [zoom input-mask audit](../optimization/zoom-input-mask-audit.md).
 
 ## Cursor confinement and dragging
 

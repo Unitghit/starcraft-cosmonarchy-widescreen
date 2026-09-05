@@ -242,6 +242,7 @@
     <ClInclude Include="src\single_stage_frame.h" />
     <ClInclude Include="src\pixel_zoom_steps.h" />
     <ClInclude Include="src\world_zoom.h" />
+    <ClInclude Include="src\gameplay_input.h" />
     <ClInclude Include="src\replay.h" />
     <ClInclude Include="src\resolution.h" />
     <ClInclude Include="src\ui_scale.h" />

@@ -20,6 +20,7 @@
 #include "unit.h"
 #include "upgrade.h"
 #include "world_zoom.h"
+#include "gameplay_input.h"
 #include "yms.h"
 
 #include <string>
@@ -1826,15 +1827,15 @@ namespace {
             NativeHudConsumesInput(physical_x, physical_y);
     }
 
-    bool HiddenNativeHudConsumesInput(int physical_x, int physical_y) {
+    bool HiddenNativeHudConsumesInput(int dispatch_x, int dispatch_y) {
         // The live dialog tree remains at native coordinates even though the
         // compositor presents it elsewhere. Detect only solid pixels in that
         // obsolete location so they can be bypassed for gameplay input.
-        return physical_x >= 0 && physical_y >= 0 &&
-            physical_x < static_cast<int>(resolution::native_width) &&
-            physical_y < static_cast<int>(resolution::native_height) &&
-            (NativeMaskConsumesInput(physical_x, physical_y) ||
-             NativeGameMenuControlContains(physical_x, physical_y));
+        return dispatch_x >= 0 && dispatch_y >= 0 &&
+            dispatch_x < static_cast<int>(resolution::native_width) &&
+            dispatch_y < static_cast<int>(resolution::native_height) &&
+            (NativeMaskConsumesInput(dispatch_x, dispatch_y) ||
+             NativeGameMenuControlContains(dispatch_x, dispatch_y));
     }
 
     typedef void (__fastcall *GameplayClickProc)(void *);
@@ -2700,6 +2701,10 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         static_cast<int>(*bw::mouse_clickpos_x) : 0;
     const int trace_engine_before_y = trace_mouse ?
         static_cast<int>(*bw::mouse_clickpos_y) : 0;
+    const auto battlefield_route = trace_mouse && *bw::popup_dialog_active == 0 ?
+        gameplay_input::RouteBattlefield(trace_raw_x, trace_raw_y,
+                                        HiddenNativeHudConsumesInput) :
+        gameplay_input::BattlefieldRoute{{0, 0}, false};
     if (trace_mouse) {
         latest_physical_mouse_x = trace_raw_x;
         latest_physical_mouse_y = trace_raw_y;
@@ -2708,9 +2713,9 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
             *bw::popup_dialog_active == 0 &&
             trace_raw_x >= 0 && trace_raw_y >= 0 &&
             trace_raw_x < static_cast<int>(resolution::game_width) &&
-            trace_raw_y < static_cast<int>(resolution::game_height) &&
+            trace_raw_y < static_cast<int>(resolution::screen_height) &&
             !ExpandedHudConsumesInput(trace_raw_x, trace_raw_y) &&
-            HiddenNativeHudConsumesInput(trace_raw_x, trace_raw_y);
+            battlefield_route.hidden_native_hud;
     }
     const bool direct_expanded_hud_hit = trace_mouse &&
         *bw::popup_dialog_active == 0 &&
@@ -2734,13 +2739,20 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK ||
         msg == WM_RBUTTONDOWN || msg == WM_RBUTTONDBLCLK ||
         msg == WM_MBUTTONDOWN || msg == WM_MBUTTONDBLCLK;
+    // Middle-pan initialization owns its own event/anchor path, not the
+    // wrapped left/right gameplay callbacks below. Preserve its established
+    // bypass policy while correcting selection and order dispatch.
+    const bool native_button_hit =
+        (msg == WM_MBUTTONDOWN || msg == WM_MBUTTONDBLCLK) ?
+        HiddenNativeHudConsumesInput(trace_raw_x, trace_raw_y) :
+        battlefield_route.hidden_native_hud;
     const bool hidden_native_ui_hit = is_in_game() &&
         gameplay_button_down && *bw::popup_dialog_active == 0 &&
         trace_raw_x >= 0 && trace_raw_y >= 0 &&
         trace_raw_x < static_cast<int>(resolution::game_width) &&
-        trace_raw_y < static_cast<int>(resolution::game_height) &&
+        trace_raw_y < static_cast<int>(resolution::screen_height) &&
         !ExpandedHudConsumesInput(trace_raw_x, trace_raw_y) &&
-        HiddenNativeHudConsumesInput(trace_raw_x, trace_raw_y);
+        native_button_hit;
 
     bool translated_world_zoom_event = false;
     if (is_in_game()) {
@@ -2855,21 +2867,9 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
                     translated_world_zoom_event = true;
                     const int physical_x = mouse_x;
                     const int physical_y = mouse_y;
-                    const world_zoom::Point source =
-                        world_zoom::PresentedToSource(mouse_x, mouse_y);
+                    const world_zoom::Point source = battlefield_route.point;
                     mouse_x = source.x;
                     mouse_y = source.y;
-
-                    // Preserve StarCraft's physical edge-scroll triggers.
-                    // Everywhere else receives the exact inverse coordinate
-                    // of the displayed world crop.
-                    if (physical_x <= 1)
-                        mouse_x = 0;
-                    else if (physical_x >=
-                        static_cast<int>(resolution::game_width) - 2)
-                        mouse_x = static_cast<int>(resolution::game_width) - 1;
-                    if (physical_y <= 1)
-                        mouse_y = 0;
 
                     cursor_offset_x = physical_x - mouse_x;
                     cursor_offset_y = physical_y - mouse_y;
@@ -2904,13 +2904,11 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         GetCursorPos(&physical_cursor_before_click) != FALSE;
     // Cosmonarchy dispatches gameplay clicks through a second internal dialog
     // event. Correct that final stage after bypassing an invisible old HUD.
-    const world_zoom::Point expected_zoomed_click =
-        world_zoom::PresentedToSource(trace_raw_x, trace_raw_y);
     const int expected_click_x = hidden_native_ui_hit ?
-        (world_zoom::Active() ? expected_zoomed_click.x : trace_raw_x) :
+        battlefield_route.point.x :
         trace_forwarded_x;
     const int expected_click_y = hidden_native_ui_hit ?
-        (world_zoom::Active() ? expected_zoomed_click.y : trace_raw_y) :
+        battlefield_route.point.y :
         trace_forwarded_y;
     void *saved_left_click_proc = nullptr;
     void *saved_right_click_proc = nullptr;
@@ -3102,7 +3100,7 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
             *bw::mouse_clickpos_y = trace_raw_y;
         }
     }
-    if (translated_ui_event || hidden_native_ui_hit) {
+    if (translated_ui_event || (hidden_native_ui_hit && !zoom_gameplay_event)) {
         if (hold_native_minimap_mouse) {
             SetExpandedCursorOffset(trace_raw_x - trace_forwarded_x,
                                     trace_raw_y - trace_forwarded_y);

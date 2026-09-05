@@ -266,8 +266,11 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\world_zoom.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
+        <Filter>Header Files</Filter>
+      </ClInclude>
+    <ClInclude Include="src\gameplay_input.h">
+        <Filter>Header Files</Filter>
+      </ClInclude>
     <ClInclude Include="src\rng.h">
       <Filter>Header Files</Filter>
     </ClInclude>
