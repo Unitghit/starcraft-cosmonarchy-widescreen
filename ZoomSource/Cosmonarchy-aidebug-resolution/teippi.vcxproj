@@ -161,6 +161,7 @@
     <ClCompile Include="src\single_stage.cpp" />
     <ClCompile Include="src\single_stage_portable.cpp" />
     <ClCompile Include="src\world_zoom.cpp" />
+    <ClCompile Include="src\zoom_pan.cpp" />
     <ClCompile Include="src\scconsole.cpp" />
     <ClCompile Include="src\selection.cpp" />
     <ClCompile Include="src\strings.cpp" />
@@ -242,6 +243,8 @@
     <ClInclude Include="src\single_stage_frame.h" />
     <ClInclude Include="src\pixel_zoom_steps.h" />
     <ClInclude Include="src\world_zoom.h" />
+    <ClInclude Include="src\zoom_pan.h" />
+    <ClInclude Include="src\pan_motion.h" />
     <ClInclude Include="src\gameplay_input.h" />
     <ClInclude Include="src\replay.h" />
     <ClInclude Include="src\resolution.h" />

@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.5.1'
+    [string]$Version = '0.5.2'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -72,6 +72,7 @@ if ($LASTEXITCODE -ne 0) {
 & (Join-Path $repository 'ZoomIntegration\verify_world_zoom_native.ps1')
 & (Join-Path $repository 'ZoomIntegration\verify_ui_scale.ps1')
 & (Join-Path $repository 'ZoomIntegration\verify_panning_native.ps1')
+& (Join-Path $repository 'ZoomIntegration\verify_zoom_pan.ps1')
 & (Join-Path $repository 'ZoomIntegration\verify_single_stage.ps1')
 
 & dotnet run --project (Join-Path $repository `

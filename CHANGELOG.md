@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2, zoom panning hotfix
+
+- Camera panning speed now adjusts to your zoom level.
+
 ## 0.5.1, zoom input hotfix
 
 - Fixed invisible areas blocking unit orders while zoomed in.

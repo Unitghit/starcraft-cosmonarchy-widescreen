@@ -61,6 +61,7 @@ remains 640x480 with a nominal 640x400 game viewport.
   - [Resolution matrix](testing/resolution-matrix.md)
 - Optimization
   - [Panning artifact audit](optimization/panning-artifact-audit.md)
+  - [Zoom-relative pan speed](optimization/zoom-pan-speed.md)
   - [Gameplay zoom audit](optimization/world-zoom-audit.md)
   - [Performance optimization audit](optimization/performance-audit.md)
 

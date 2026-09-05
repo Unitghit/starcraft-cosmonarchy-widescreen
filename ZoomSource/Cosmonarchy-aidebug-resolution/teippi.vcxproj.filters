@@ -64,6 +64,9 @@
     <ClCompile Include="src\world_zoom.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\zoom_pan.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\mpqdraft.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -269,6 +272,12 @@
         <Filter>Header Files</Filter>
       </ClInclude>
     <ClInclude Include="src\gameplay_input.h">
+        <Filter>Header Files</Filter>
+      </ClInclude>
+    <ClInclude Include="src\zoom_pan.h">
+        <Filter>Header Files</Filter>
+      </ClInclude>
+    <ClInclude Include="src\pan_motion.h">
         <Filter>Header Files</Filter>
       </ClInclude>
     <ClInclude Include="src\rng.h">

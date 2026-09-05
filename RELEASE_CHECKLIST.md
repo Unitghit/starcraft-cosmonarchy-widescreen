@@ -1,5 +1,25 @@
 # Release checklist
 
+## v0.5.2 preparation, 2026-09-05
+
+- The user tested zoom-adjusted panning and reported that it seems good.
+- Live inspection confirmed all five camera-input calls use the new adapters.
+  Native minimap, scripted, portrait, and control-group centering calls are not
+  patched by this change.
+- Fractional-motion and x86 adapter tests are included in the release gate.
+- The full v0.5.2 release build passed: motion/ABI, zoom/input, panning geometry,
+  HUD sizing, graphics backends, configurator, and release-cleanliness checks.
+- Runtime diagnostics are compiled out. The five-file ZIP allowlist excludes
+  AI repair, map reveal, captures, test tools, and game files. ZIP entry bytes,
+  standalone checksums, and EXE version 0.5.2.0 were verified.
+- The rebuilt renderer's executable code section matches the user-tested
+  candidate. No further runtime implementation changes were made for packaging.
+- Local bundle: `artifacts/release/StarCraft-Cosmonarchy-Widescreen-v0.5.2.zip`.
+  ZIP SHA256: `A4D7CE468BC53C7C82FBB21D179888EBE104BDF39A9ECDB57DACC95434CA4AC4`.
+  EXE SHA256: `5012D862397BE062538486E494D961DFDF43CAB2793A359C404FC4600BDCDDB0`.
+- The user approved committing, pushing, and publishing this verified v0.5.2
+  bundle. No new Linux/macOS interactive coverage is claimed.
+
 ## v0.5.1 verification, 2026-09-05
 
 - The user confirmed that blocked regions could no longer be found after

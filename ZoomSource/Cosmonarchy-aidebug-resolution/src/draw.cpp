@@ -11,6 +11,7 @@
 #include "unit_type.h"
 #include "runtime_diagnostics.h"
 #include "world_zoom.h"
+#include "zoom_pan.h"
 #include "single_stage.h"
 #include "single_stage_frame.h"
 #include "ui_scale.h"
@@ -1655,6 +1656,7 @@ void BeginStockDrawScreen()
     EnsureGptpUpgradeResearchClear();
     EnsureGptpInitialCameraCenter();
     EnsureGptpControlGroupCameraCenter();
+    zoom_pan::EnsureHooks();
     EnsurePresentationCursorGuards();
     RepairReplayPlayerColorRamps();
     ++stock_draw_depth;
