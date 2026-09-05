@@ -12,12 +12,14 @@
 #include "pathing.h"
 #include "player.h"
 #include "resolution.h"
+#include "ui_scale.h"
 #include "selection.h"
 #include "sprite.h"
 #include "strings.h"
 #include "tech.h"
 #include "unit.h"
 #include "upgrade.h"
+#include "world_zoom.h"
 #include "yms.h"
 
 #include <string>
@@ -1685,9 +1687,7 @@ namespace {
 
     bool NativeHudConsumesInput(int physical_x, int physical_y) {
         return NativeMaskConsumesInput(
-            physical_x - static_cast<int>(resolution::hud_left),
-            physical_y - static_cast<int>(resolution::hud_top -
-                resolution::native_hud_top));
+            ui_scale::hud.NativeX(physical_x), ui_scale::hud.NativeY(physical_y));
     }
 
     bool NativeHudCursorMaskContains(int native_x, int native_y)
@@ -1805,20 +1805,15 @@ namespace {
     }
 
     bool PresentedGameMenuControlContains(int physical_x, int physical_y) {
-        const int native_x = physical_x -
-            static_cast<int>(resolution::hud_left);
-        const int native_y = physical_y -
-            static_cast<int>(resolution::hud_top -
-                resolution::native_hud_top);
+        const int native_x = ui_scale::hud.NativeX(physical_x);
+        const int native_y = ui_scale::hud.NativeY(physical_y);
         return NativeGameMenuControlContains(native_x, native_y);
     }
 
     bool ExpandedHudConsumesInput(int physical_x, int physical_y) {
-        if (physical_x < static_cast<int>(resolution::hud_left) ||
-            physical_x >= static_cast<int>(resolution::hud_left +
-                resolution::native_width) ||
-            physical_y < static_cast<int>(resolution::hud_top) ||
-            physical_y >= static_cast<int>(resolution::screen_height))
+        const int native_x = ui_scale::hud.NativeX(physical_x);
+        const int native_y = ui_scale::hud.NativeY(physical_y);
+        if (native_x < 0 || native_x >= 640 || native_y < 314 || native_y >= 480)
             return false;
 
         // Above the logical battlefield, retain StarCraft's transparency mask
@@ -1827,7 +1822,7 @@ namespace {
         // whole row so minimap pixels and unmasked control art cannot fall
         // through to the expanded gameplay handler.
         return PresentedGameMenuControlContains(physical_x, physical_y) ||
-            physical_y >= static_cast<int>(resolution::game_height) ||
+            native_y >= static_cast<int>(resolution::native_game_height) ||
             NativeHudConsumesInput(physical_x, physical_y);
     }
 
@@ -2219,6 +2214,7 @@ bool ShouldSuppressLegacyHudTooltip()
 {
     const bool suppress = is_in_game() && latest_physical_mouse_valid &&
         *bw::popup_dialog_active == 0 && suppress_legacy_hud_tooltip;
+#if RUNTIME_DIAGNOSTICS_ENABLED
     static bool initialized;
     static bool previous;
     if (!initialized || suppress != previous)
@@ -2238,6 +2234,7 @@ bool ShouldSuppressLegacyHudTooltip()
         initialized = true;
         previous = suppress;
     }
+#endif
     return suppress;
 }
 
@@ -2272,19 +2269,11 @@ bool ShouldSuppressLegacyGameMenuTooltip(void *dialog)
         static_cast<int>(*reinterpret_cast<const int16_t *>(parent + 0x06));
     const int native_right = native_left + std::max(0, control_width - 1);
     const int native_bottom = native_top + std::max(0, control_height - 1);
-    const int presented_left = native_left +
-        static_cast<int>(resolution::hud_left);
-    const int presented_top = native_top +
-        static_cast<int>(resolution::hud_top - resolution::native_hud_top);
-    const int presented_right = native_right +
-        static_cast<int>(resolution::hud_left);
-    const int presented_bottom = native_bottom +
-        static_cast<int>(resolution::hud_top - resolution::native_hud_top);
+    const int pointer_x = ui_scale::hud.NativeX(latest_physical_mouse_x);
+    const int pointer_y = ui_scale::hud.NativeY(latest_physical_mouse_y);
     const bool inside_presented =
-        latest_physical_mouse_x >= presented_left &&
-        latest_physical_mouse_x <= presented_right &&
-        latest_physical_mouse_y >= presented_top &&
-        latest_physical_mouse_y <= presented_bottom;
+        pointer_x >= native_left && pointer_x <= native_right &&
+        pointer_y >= native_top && pointer_y <= native_bottom;
     const bool suppress = !inside_presented;
     void **hover_owner = reinterpret_cast<void **>(
         const_cast<uint8_t *>(parent) + 0x3e);
@@ -2344,11 +2333,8 @@ void *PrepareGameMenuControlLookup(void *event)
     // register-based control lookup.
     static alignas(4) uint8_t translated_event[0x14];
     memcpy(translated_event, event, sizeof(translated_event));
-    const int native_x = latest_physical_mouse_x -
-        static_cast<int>(resolution::hud_left);
-    const int native_y = latest_physical_mouse_y -
-        static_cast<int>(resolution::hud_top -
-            resolution::native_hud_top);
+    const int native_x = ui_scale::hud.NativeX(latest_physical_mouse_x);
+    const int native_y = ui_scale::hud.NativeY(latest_physical_mouse_y);
     *reinterpret_cast<uint16_t *>(translated_event + 0x0e) =
         static_cast<uint16_t>(native_x);
     *reinterpret_cast<uint16_t *>(translated_event + 0x10) =
@@ -2380,11 +2366,10 @@ void *PrepareExpandedHudControlLookup(void *event)
     memcpy(translated_event, event, sizeof(translated_event));
     const int native_x = std::max(0, std::min(
         static_cast<int>(resolution::native_width) - 1,
-        physical_x - static_cast<int>(resolution::hud_left)));
+        ui_scale::hud.NativeX(physical_x)));
     const int native_y = std::max(0, std::min(
         static_cast<int>(resolution::native_height) - 1,
-        physical_y - static_cast<int>(resolution::hud_top -
-            resolution::native_hud_top)));
+        ui_scale::hud.NativeY(physical_y)));
     *reinterpret_cast<uint16_t *>(translated_event + 0x0e) =
         static_cast<uint16_t>(native_x);
     *reinterpret_cast<uint16_t *>(translated_event + 0x10) =
@@ -2587,15 +2572,78 @@ bool PresentedHudOwnsCursor()
         return false;
     }
 
-    const int native_x = latest_physical_mouse_x -
-        static_cast<int>(resolution::hud_left);
-    const int native_y = latest_physical_mouse_y -
-        static_cast<int>(resolution::hud_top -
-            resolution::native_hud_top);
+    const int native_x = ui_scale::hud.NativeX(latest_physical_mouse_x);
+    const int native_y = ui_scale::hud.NativeY(latest_physical_mouse_y);
     return NativeHudCursorMaskContains(native_x, native_y);
 }
 
+void SynchronizeWorldZoomPointer()
+{
+    if (!world_zoom::Enabled() || !is_in_game() ||
+        !latest_physical_mouse_valid || *bw::popup_dialog_active != 0 ||
+        (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
+        (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0 ||
+        ExpandedHudConsumesInput(latest_physical_mouse_x,
+                                 latest_physical_mouse_y))
+        return;
+
+    const world_zoom::Point source = world_zoom::PresentedToSource(
+        latest_physical_mouse_x, latest_physical_mouse_y);
+    if (*bw::mouse_clickpos_x == source.x &&
+        *bw::mouse_clickpos_y == source.y)
+        return;
+
+    *bw::mouse_clickpos_x = source.x;
+    *bw::mouse_clickpos_y = source.y;
+    SetExpandedCursorOffset(latest_physical_mouse_x - source.x,
+                            latest_physical_mouse_y - source.y);
+    bw::RefreshCursorLayer();
+}
+
 LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+    if (!is_in_game())
+        latest_physical_mouse_valid = false;
+    // Mouse-wheel zoom is opt-in and owns wheel input only over exposed
+    // battlefield pixels. Native HUD controls, the minimap, popup dialogs,
+    // and front-end menus retain their original behavior.
+    if (msg == WM_MOUSEWHEEL && is_in_game() && world_zoom::Enabled() &&
+        *bw::popup_dialog_active == 0 &&
+        (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0 &&
+        (GetAsyncKeyState(VK_MBUTTON) & 0x8000) == 0 &&
+        !*bw::is_drag_selecting) {
+        // Reuse the normalized, pre-HUD/pre-zoom mouse-message position.
+        // Wheel lParam can be screen or wrapper-client coordinates depending
+        // on the subclass chain. The outer WndProc's module cannot prove which.
+        // The ordinary move/button path already supplies the coordinates used
+        // by hover and clicks, independent of window origin and output scale.
+        const POINT client_point = {
+            latest_physical_mouse_x, latest_physical_mouse_y
+        };
+        if (latest_physical_mouse_valid &&
+            client_point.x >= 0 && client_point.y >= 0 &&
+            client_point.x < static_cast<LONG>(resolution::game_width) &&
+            client_point.y < static_cast<LONG>(resolution::screen_height) &&
+            !ExpandedHudConsumesInput(client_point.x, client_point.y)) {
+            // Use the last completed render transform, not a partially
+            // advanced animation which has not been displayed yet.
+            if (!world_zoom::AdjustByWheel(
+                    GET_WHEEL_DELTA_WPARAM(wparam),
+                    client_point.x, client_point.y,
+                    *bw::screen_x, *bw::screen_y))
+                return CallWindowProcA(OldWndProc, hwnd, msg, wparam, lparam);
+            const world_zoom::Point source =
+                world_zoom::PresentedToSource(client_point.x, client_point.y);
+            latest_physical_mouse_x = client_point.x;
+            latest_physical_mouse_y = client_point.y;
+            latest_physical_mouse_valid = true;
+            *bw::mouse_clickpos_x = source.x;
+            *bw::mouse_clickpos_y = source.y;
+            SetExpandedCursorOffset(client_point.x - source.x,
+                                    client_point.y - source.y);
+            bw::RefreshCursorLayer();
+            return 0;
+        }
+    }
     // Front-end menus are rendered natively at 640x480 and aspect-fitted into
     // the output. Invert that presentation transform before StarCraft's
     // dialog tree sees mouse input. Points in the pillar/letterbox area map to
@@ -2682,10 +2730,6 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
          msg == WM_MBUTTONDOWN || msg == WM_MBUTTONUP ||
          msg == WM_MBUTTONDBLCLK || msg == WM_XBUTTONDOWN ||
          msg == WM_XBUTTONUP || msg == WM_XBUTTONDBLCLK);
-    POINT physical_cursor_before_hud_click = {};
-    const bool physical_cursor_before_valid =
-        translated_ui_button_event &&
-        GetCursorPos(&physical_cursor_before_hud_click) != FALSE;
     const bool gameplay_button_down =
         msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK ||
         msg == WM_RBUTTONDOWN || msg == WM_RBUTTONDBLCLK ||
@@ -2698,6 +2742,7 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         !ExpandedHudConsumesInput(trace_raw_x, trace_raw_y) &&
         HiddenNativeHudConsumesInput(trace_raw_x, trace_raw_y);
 
+    bool translated_world_zoom_event = false;
     if (is_in_game()) {
         if ((msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) &&
             *bw::popup_dialog_active == 0 &&
@@ -2750,15 +2795,12 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
                                        static_cast<WORD>(mouse_y));
                 }
                 else if (translated_hud_event) {
-                    cursor_offset_x = static_cast<int>(resolution::hud_left);
-                    cursor_offset_y = static_cast<int>(resolution::hud_top -
-                        resolution::native_hud_top);
-                    mouse_x = std::max(0, std::min(
-                        static_cast<int>(resolution::native_width) - 1,
-                        mouse_x - cursor_offset_x));
-                    mouse_y = std::max(0, std::min(
-                        static_cast<int>(resolution::native_height) - 1,
-                        mouse_y - cursor_offset_y));
+                    const int physical_x = mouse_x;
+                    const int physical_y = mouse_y;
+                    mouse_x = std::max(0, std::min(639, ui_scale::hud.NativeX(mouse_x)));
+                    mouse_y = std::max(0, std::min(479, ui_scale::hud.NativeY(mouse_y)));
+                    cursor_offset_x = physical_x - mouse_x;
+                    cursor_offset_y = physical_y - mouse_y;
                     lparam = MAKELPARAM(static_cast<WORD>(mouse_x),
                                        static_cast<WORD>(mouse_y));
                     if (msg == WM_LBUTTONDOWN ||
@@ -2804,6 +2846,36 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
                     lparam = MAKELPARAM(static_cast<WORD>(mouse_x),
                                        static_cast<WORD>(mouse_y));
                 }
+                else if (world_zoom::Active() &&
+                    (expanded_battlefield_drag_active ||
+                     (mouse_x >= 0 && mouse_y >= 0 &&
+                      mouse_x < static_cast<int>(resolution::game_width) &&
+                      mouse_y < static_cast<int>(resolution::screen_height) &&
+                      !ExpandedHudConsumesInput(mouse_x, mouse_y)))) {
+                    translated_world_zoom_event = true;
+                    const int physical_x = mouse_x;
+                    const int physical_y = mouse_y;
+                    const world_zoom::Point source =
+                        world_zoom::PresentedToSource(mouse_x, mouse_y);
+                    mouse_x = source.x;
+                    mouse_y = source.y;
+
+                    // Preserve StarCraft's physical edge-scroll triggers.
+                    // Everywhere else receives the exact inverse coordinate
+                    // of the displayed world crop.
+                    if (physical_x <= 1)
+                        mouse_x = 0;
+                    else if (physical_x >=
+                        static_cast<int>(resolution::game_width) - 2)
+                        mouse_x = static_cast<int>(resolution::game_width) - 1;
+                    if (physical_y <= 1)
+                        mouse_y = 0;
+
+                    cursor_offset_x = physical_x - mouse_x;
+                    cursor_offset_y = physical_y - mouse_y;
+                    lparam = MAKELPARAM(static_cast<WORD>(mouse_x),
+                                       static_cast<WORD>(mouse_y));
+                }
                 SetExpandedCursorOffset(cursor_offset_x, cursor_offset_y);
             } break;
         }
@@ -2812,12 +2884,34 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         static_cast<short>(LOWORD(lparam)) : 0;
     const int trace_forwarded_y = trace_mouse ?
         static_cast<short>(HIWORD(lparam)) : 0;
+    // World clicks are forwarded in zoom-source coordinates. Treat those
+    // button messages like translated HUD messages for the duration of native
+    // dispatch: the physical pointer must not follow an engine SetCursorPos,
+    // and the final cursor layer must be rebuilt with the presentation offset.
+    const bool zoom_gameplay_event = world_zoom::Active() &&
+        !translated_ui_event &&
+        (translated_world_zoom_event || hidden_native_ui_hit);
+    const bool zoom_gameplay_button_event = zoom_gameplay_event &&
+        (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP ||
+         msg == WM_LBUTTONDBLCLK || msg == WM_RBUTTONDOWN ||
+         msg == WM_RBUTTONUP || msg == WM_RBUTTONDBLCLK ||
+         msg == WM_MBUTTONDOWN || msg == WM_MBUTTONUP ||
+         msg == WM_MBUTTONDBLCLK || msg == WM_XBUTTONDOWN ||
+         msg == WM_XBUTTONUP || msg == WM_XBUTTONDBLCLK);
+    POINT physical_cursor_before_click = {};
+    const bool physical_cursor_before_valid =
+        (translated_ui_button_event || zoom_gameplay_button_event) &&
+        GetCursorPos(&physical_cursor_before_click) != FALSE;
     // Cosmonarchy dispatches gameplay clicks through a second internal dialog
     // event. Correct that final stage after bypassing an invisible old HUD.
+    const world_zoom::Point expected_zoomed_click =
+        world_zoom::PresentedToSource(trace_raw_x, trace_raw_y);
     const int expected_click_x = hidden_native_ui_hit ?
-        trace_raw_x : trace_forwarded_x;
+        (world_zoom::Active() ? expected_zoomed_click.x : trace_raw_x) :
+        trace_forwarded_x;
     const int expected_click_y = hidden_native_ui_hit ?
-        trace_raw_y : trace_forwarded_y;
+        (world_zoom::Active() ? expected_zoomed_click.y : trace_raw_y) :
+        trace_forwarded_y;
     void *saved_left_click_proc = nullptr;
     void *saved_right_click_proc = nullptr;
     const bool trace_left_command = is_in_game() &&
@@ -2903,7 +2997,8 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
     }
     const bool saved_cursor_warp_suppression =
         suppress_translated_hud_cursor_warp;
-    suppress_translated_hud_cursor_warp = translated_ui_event;
+    suppress_translated_hud_cursor_warp =
+        translated_ui_event || zoom_gameplay_event;
     const LRESULT result = CallWindowProcA(OldWndProc, hwnd, msg, wparam, lparam);
     suppress_translated_hud_cursor_warp = saved_cursor_warp_suppression;
     uint32_t camera_after_x = *bw::screen_x;
@@ -2978,7 +3073,19 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
     expected_gameplay_click_valid = false;
     const bool hold_native_minimap_mouse =
         translated_minimap_drag_active && msg != WM_LBUTTONUP;
-    if (hidden_native_ui_hit || translated_ui_event) {
+    if (zoom_gameplay_event) {
+        // Native click handling may rewrite g_mouse or rebuild layer 0 using
+        // the source-space event point. Restore the exact inverse-transform
+        // pair before the frame is composed so the cursor never flashes at
+        // its unzoomed location.
+        *bw::mouse_clickpos_x = expected_click_x;
+        *bw::mouse_clickpos_y = expected_click_y;
+        SetExpandedCursorOffset(trace_raw_x - expected_click_x,
+                                trace_raw_y - expected_click_y);
+        if (zoom_gameplay_button_event)
+            bw::RefreshCursorLayer();
+    }
+    else if (hidden_native_ui_hit || translated_ui_event) {
         if (hold_native_minimap_mouse) {
             // minimap_game_mouse_update is polled between window messages
             // while capture is held. Preserve its native point for that full
@@ -2997,10 +3104,8 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
     }
     if (translated_ui_event || hidden_native_ui_hit) {
         if (hold_native_minimap_mouse) {
-            SetExpandedCursorOffset(
-                static_cast<int>(resolution::hud_left),
-                static_cast<int>(resolution::hud_top -
-                    resolution::native_hud_top));
+            SetExpandedCursorOffset(trace_raw_x - trace_forwarded_x,
+                                    trace_raw_y - trace_forwarded_y);
         }
         else {
             // Native dispatch has already rebuilt cursor layer 0 using the
@@ -3014,29 +3119,29 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         }
     }
     if (physical_cursor_before_valid) {
-        POINT physical_cursor_after_hud_click = {};
-        if (GetCursorPos(&physical_cursor_after_hud_click) &&
-            (physical_cursor_after_hud_click.x !=
-                 physical_cursor_before_hud_click.x ||
-             physical_cursor_after_hud_click.y !=
-                 physical_cursor_before_hud_click.y)) {
+        POINT physical_cursor_after_click = {};
+        if (GetCursorPos(&physical_cursor_after_click) &&
+            (physical_cursor_after_click.x !=
+                 physical_cursor_before_click.x ||
+             physical_cursor_after_click.y !=
+                 physical_cursor_before_click.y)) {
             // Native dialog controls receive a translated client point, but
             // that translation must never become a physical cursor warp.
             // Some status-panel controls pass their native point through the
             // cursor/capture manager while processing a click. Restore the
             // exact screen-space point observed at the window boundary.
-            SetCursorPos(physical_cursor_before_hud_click.x,
-                         physical_cursor_before_hud_click.y);
+            SetCursorPos(physical_cursor_before_click.x,
+                         physical_cursor_before_click.y);
             FILE *log = fopen("fixed_zoom_input.log", "a");
             if (log) {
                 fprintf(log,
                     "%lu restored translated-HUD cursor screen=(%ld,%ld) "
                     "from=(%ld,%ld) msg=%04X raw=(%d,%d)\n",
                     static_cast<unsigned long>(GetTickCount()),
-                    physical_cursor_before_hud_click.x,
-                    physical_cursor_before_hud_click.y,
-                    physical_cursor_after_hud_click.x,
-                    physical_cursor_after_hud_click.y,
+                    physical_cursor_before_click.x,
+                    physical_cursor_before_click.y,
+                    physical_cursor_after_click.x,
+                    physical_cursor_after_click.y,
                     static_cast<unsigned>(msg), trace_raw_x, trace_raw_y);
                 fclose(log);
             }
@@ -3061,6 +3166,9 @@ LRESULT CALLBACK ConsoleWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
         }
         SetExpandedCursorOffset(0, 0);
     }
+    // Finish existing gesture cleanup before invalidating the pointer snapshot.
+    if (msg == WM_KILLFOCUS || (msg == WM_ACTIVATEAPP && !wparam))
+        latest_physical_mouse_valid = false;
     if (trace_mouse) {
         TraceInputEvent(msg, trace_raw_x, trace_raw_y,
             trace_forwarded_x, trace_forwarded_y,

@@ -158,6 +158,9 @@
     <ClCompile Include="src\pathing.cpp" />
     <ClCompile Include="src\player.cpp" />
     <ClCompile Include="src\presentation.cpp" />
+    <ClCompile Include="src\single_stage.cpp" />
+    <ClCompile Include="src\single_stage_portable.cpp" />
+    <ClCompile Include="src\world_zoom.cpp" />
     <ClCompile Include="src\scconsole.cpp" />
     <ClCompile Include="src\selection.cpp" />
     <ClCompile Include="src\strings.cpp" />
@@ -235,8 +238,13 @@
     <ClInclude Include="src\perfclock.h" />
     <ClInclude Include="src\player.h" />
     <ClInclude Include="src\presentation.h" />
+    <ClInclude Include="src\single_stage.h" />
+    <ClInclude Include="src\single_stage_frame.h" />
+    <ClInclude Include="src\pixel_zoom_steps.h" />
+    <ClInclude Include="src\world_zoom.h" />
     <ClInclude Include="src\replay.h" />
     <ClInclude Include="src\resolution.h" />
+    <ClInclude Include="src\ui_scale.h" />
     <ClInclude Include="src\rng.h" />
     <ClInclude Include="src\save.h" />
     <ClInclude Include="src\scconsole.h" />

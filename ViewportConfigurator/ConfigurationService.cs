@@ -14,7 +14,7 @@ internal sealed class ConfigurationService
     private static readonly string[] OwnedDdrawKeys =
     {
         "width", "height", "fullscreen", "windowed", "maintas", "boxing",
-        "maxfps", "adjmouse", "shader", "d3d9_filter", "posX", "posY",
+        "maxfps", "minfps", "adjmouse", "shader", "d3d9_filter", "posX", "posY",
         "border", "resizable", "savesettings", "maxgameticks",
         "nonexclusive", "singlecpu",
     };
@@ -119,7 +119,7 @@ internal sealed class ConfigurationService
             HashFile(Paths.DdrawDllPath) : null;
         var ddraw = DdrawCompatibilityDetector.Classify(
             ddrawHash, manifest.CncDdrawProfiles);
-        return new(true, state + " " + ddraw.Message);
+        return new(true, ddraw.Tested ? state : state + " " + ddraw.Message);
     }
 
     public bool IsGameRunning() => GetGameProcesses().Count != 0;
@@ -286,6 +286,12 @@ internal sealed class ConfigurationService
     public Dictionary<string, string> ReadSavedPresentation() =>
         IniDocument.ReadSection(Paths.ViewportConfigPath, "presentation");
 
+    public Dictionary<string, string> ReadSavedWorldZoom() =>
+        IniDocument.ReadSection(Paths.ViewportConfigPath, "world_zoom");
+
+    public Dictionary<string, string> ReadSavedUiSize() =>
+        IniDocument.ReadSection(Paths.ViewportConfigPath, "ui_size");
+
     private void EnsureBackups()
     {
         if (!File.Exists(Paths.RendererBackupPath))
@@ -319,7 +325,8 @@ internal sealed class ConfigurationService
             ["windowed"] = windowed.ToString().ToLowerInvariant(),
             ["maintas"] = settings.PreserveAspectRatio.ToString().ToLowerInvariant(),
             ["boxing"] = "false",
-            ["maxfps"] = "333",
+            ["maxfps"] = settings.HighRefreshPointer && settings.SingleStagePresentation ? "-1" : "333",
+            ["minfps"] = settings.HighRefreshPointer && settings.SingleStagePresentation ? "-1" : "0",
             ["adjmouse"] = "true",
             ["shader"] = nearest ? "Shaders\\nearest-neighbor.glsl" : "Bilinear",
             ["d3d9_filter"] = nearest ? "0" : "1",
@@ -495,7 +502,7 @@ internal sealed class ConfigurationService
             area.Top + (area.Height - settings.OutputHeight) / 2);
     }
 
-    private static string BuildViewportConfig(ViewportSettings settings)
+    internal static string BuildViewportConfig(ViewportSettings settings)
     {
         var mode = settings.WindowMode == WindowMode.Windowed ?
             settings.PresentationMode switch
@@ -522,7 +529,20 @@ internal sealed class ConfigurationService
             internal_height={settings.Profile.Height}
             top_ui_layout={(settings.TopTextLayout == TopTextLayout.ScreenEdges ? "screen_edges" : "centered_4_3")}
 
+            [ui_size]
+            hud_reference_height={HudSizeOptions.Normalize(settings.HudReferenceHeight)}
+            separate_top_text={(settings.SeparateTopTextSize ? "1" : "0")}
+            top_reference_height={HudSizeOptions.Normalize(settings.TopTextReferenceHeight)}
+
+            [world_zoom]
+            enabled={(settings.WorldZoomEnabled ? "1" : "0")}
+            percentage=100
+            {WorldZoomOptions.ConfigLines(settings.SmoothWorldZoom, settings.StartingZoomUnits, settings.Profile.Width, settings.ExtraZoomPercent)}
+
             [presentation]
+            backend={(settings.SingleStagePresentation ? "single_stage" : "cnc_ddraw")}
+            world_filter={(settings.SmoothWorldEdges ? "sharp_edges" : "nearest")}
+            high_refresh_pointer={(settings.HighRefreshPointer ? "1" : "0")}
             mode={mode}
             scale_numerator={settings.ScaleNumerator}
             scale_denominator={settings.ScaleDenominator}

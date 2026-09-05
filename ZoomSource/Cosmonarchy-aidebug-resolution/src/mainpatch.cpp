@@ -16,6 +16,7 @@
 #include "limits.h"
 #include "draw.h"
 #include "resolution.h"
+#include "ui_scale.h"
 #include "presentation.h"
 #include "runtime_diagnostics.h"
 #include "yms.h"
@@ -103,6 +104,11 @@ namespace
             }
             return false;
         }
+        const int hud_reference = GetPrivateProfileIntA("ui_size", "hud_reference_height", 0, path);
+        const bool separate_top = GetPrivateProfileIntA("ui_size", "separate_top_text", 0, path) != 0;
+        const int top_reference = separate_top ? GetPrivateProfileIntA(
+            "ui_size", "top_reference_height", 0, path) : hud_reference;
+        ui_scale::Configure(width, height, hud_reference, top_reference, use_screen_edges);
         presentation::default_client_width =
             width * presentation::default_scale_numerator /
             presentation::default_scale_denominator;

@@ -1,5 +1,31 @@
 # Diagnostic tools and artifacts
 
+## Release boundary
+
+The release renderer does not write these captures. Both
+`RUNTIME_DIAGNOSTICS_ENABLED` and `runtime_diagnostics::Enabled()` are disabled
+at compile time. The capture-marker instructions below describe historical
+instrumented builds, not the shipped renderer. Creating a marker cannot enable
+capture in a release build.
+
+The September 4, 2026 cleanup also excludes recurring renderer diagnostic
+timers, cursor-hover bookkeeping, and tooltip-transition bookkeeping. Layer
+table and first-frame dump helpers return before touching diagnostic state.
+The `TraceExpandedLeftClick` and `TraceExpandedRightClick` names are historical:
+their input correction is required and remains active, without log output.
+Do not remove them as diagnostic-only hooks.
+
+`scripts/verify-release-clean.ps1` checks both compile-time gates, Release
+definitions, compiled payload strings, and the configurator's embedded binary
+allowlist. When given a bundle directory, it rejects any file beyond the five
+public distribution files. `scripts/build-release.ps1` runs this gate before
+publishing and packaging, plus the GPU/reference presentation regression test.
+AI repair and map reveal are separate projects and are not packaged. Offline
+tests, capture utilities, and research remain available in source; they are not
+embedded in the configurator. The optional GUI bitmap export lives only in the
+test project. The configurator's one-shot command result/error log is retained;
+it does not run during gameplay.
+
 ## Canonical commands
 
 Build the renderer:

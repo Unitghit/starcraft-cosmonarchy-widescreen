@@ -10,7 +10,8 @@ This list is the safety boundary for resolution work.
 - Native STrans surface formats and their pitch assumptions.
 - Native dirty grid at `0x006CEFF8`.
 - Native UI source and dialog coordinate space: 640x480.
-- HUD artwork: 640 pixels wide and 166 pixels high from y=314.
+- HUD source artwork: 640 pixels wide and 166 pixels high from y=314.
+  Optional presentation scaling must not resize that source or its hit-test tree.
 - Placement Surface dimensions and pointers.
 - GPTP's layer-5 wrapper function pointer.
 - Stable GPTP QDP on disk.
@@ -51,7 +52,8 @@ rows before gameplay input runs.
 - Compose the expanded frame completely before presentation.
 - Terrain and world sprites may be tiled.
 - Screen-space text, selection rectangle, and cursor must be drawn once.
-- HUD is relocated once and does not move when a popup opens.
+- HUD is scaled/relocated once and does not move when a popup opens.
+  Rendering and pointer input share `ui_scale.h` sample ownership.
 - Only the popup rectangle is centered.
 - A relocated translucent popup's source camera is offset by the same derived
   modal-UI origin; never relocate transparency that was composited against the

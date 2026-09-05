@@ -31,6 +31,14 @@ internal static class Program
                 if (!result.Success)
                     throw new InvalidOperationException(result.Message);
             }
+            else if (command.Equals("--apply-saved", StringComparison.OrdinalIgnoreCase))
+            {
+                // Use the same loading, validation and ownership transaction as Save.
+                // Constructing the form does not show it or launch the game.
+                using var form = new MainForm(service);
+                service.Apply(form.BuildSettings());
+                message = "Settings saved.";
+            }
             else if (command.Equals("--apply-defaults",
                          StringComparison.OrdinalIgnoreCase))
             {

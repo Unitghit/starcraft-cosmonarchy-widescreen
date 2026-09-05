@@ -1,9 +1,17 @@
 # Feature status
 
-Status here refers to the current 1280x720 build unless noted otherwise.
+Status reflects local user testing through the v0.5.0 release candidate.
+Offline coverage and platform limits are recorded separately in each feature map.
 
 | Feature | Status | Evidence |
 |---|---|---|
+| High-refresh cursor and selection | Optional, user-confirmed | Windows and Wine gameplay tested; held-frame tests pass on D3D9/GL, including legacy GL 2.1; native animation and input unchanged |
+| Independent HUD and top-text sizing | User-confirmed | 2,240 geometry cases and configurator serialization pass; native engine UI unchanged |
+| Native HUD final-output sampling | User-confirmed on Windows and Wine | Uniform 3x3 native cells verified in GDI/D3D9/OpenGL; removes intermediate HUD resampling |
+| Automatic regular + pixel-perfect zoom steps | User-confirmed | Native exact-crop/union tests pass; old steps key ignored; no separate GUI option |
+| Single-stage zoom presentation | User-confirmed, default Pixel-perfect mode | Windows and Wine tested; legacy GL 2.1 and core 3.2 paths tested; macOS unverified |
+| Paused filtering and HUD scaling | Fixed, user-confirmed | Modal coverage retains the world crop and native HUD planes; fallback and D3D9/GL tests pass |
+| Zoomed same-type selection | Fixed, user-confirmed | Two guarded GPTP search calls use the displayed crop for double-click and modifier selection |
 | 1280x720 client and presentation | Confirmed | Runtime log reports exact client and pitch |
 | 2.5x presentation magnification | Confirmed | User confirmed full-client 3200x1800 at exact 5/2 scale; logical renderer remains 1280x720 with pitch 1280 |
 | Portable widescreen configurator | Implemented, integration-confirmed | Single-file WinForms app includes 4:3/16:9/custom selection through 4K, selectable centered or screen-edge top text, 1x presentation default, one embedded universal renderer, transactional Save/Restore, borderless generation, real normal-launch runtime config, and unchanged-GPTP checks |
@@ -16,7 +24,7 @@ Status here refers to the current 1280x720 build unless noted otherwise.
 | Top-screen objectives/resources layout | Both modes confirmed; runtime-selectable; centered default | `centered_native_box` and resolution-derived `screen_edges` policies passed user tests and are exposed independently in the configurator |
 | Duplicate/flickering text UI | Fixed, confirmed | Text drawn once after composition |
 | Duplicate selection rectangle | Fixed, confirmed | Direct once-per-frame expanded draw |
-| Middle-mouse pan rendering and motion | Fixed, confirmed | Gesture and every sub-quantum resting camera use a matched UI comparison pair; private columns render exact horizontal camera x instead of holding until an 8-pixel boundary; a confirmed temporal repair replaces the four stale edge columns at full-width internal pass boundaries; pan range and sensitivity derive from the configured battlefield |
+| Middle-mouse pan rendering and motion | User-confirmed, including high-resolution artifact fix | Exact horizontal camera and matched UI pairs retained. Current-frame guarded overlap replaces temporal seam repair; native crop and freshness tests pass |
 | Minimap cursor continuity | Fixed, confirmed | User test; cursor compositor identifies whether layer 0 is prepared in native or relocated coordinates on each captured minimap frame and applies the HUD offset only when needed |
 | Map-edge UI extraction | Fixed, confirmed | User test at map corners; requested and clamped camera positions use a matched world/UI comparison pair without modifying StarCraft's global camera limits |
 | Replay extended player colors | Fixed, confirmed | User test; playable-player color IDs are validated against Cosmonarchy's `game\tunit.pcx` ramps before replay drawing and only mismatched ramps are repaired |

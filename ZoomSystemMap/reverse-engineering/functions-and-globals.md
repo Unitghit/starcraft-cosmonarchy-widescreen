@@ -87,6 +87,7 @@ Addresses in the StarCraft tables are absolute addresses for the supported
 | `0x005968AC` | Active mouse-move callback | Native middle-down installs `0x00484460`; middle-up clears it after ending panning |
 | `0x00628448/70` | Smoothed camera x/y | Used by the native middle-pan anchor encoder and its expanded replacement |
 | `0x0059CC6C` | Minimap zoom level (`u16`) | Source-confirmed; initialized per map |
+| GPTP `0x259E94/98` | Pointer cells for minimap outline camera y/x | Draw-only operands at GPTP RVA `0x2C310`; redirected to zoomed visible-origin shadows |
 | `0x0057FD34/38` | Native portrait camera target x/y | Used by `0x0045E9F0`; live capture proved the Cosmonarchy bottom-HUD portrait path bypasses these globals |
 | `0x00597248` | Active portrait unit pointer | Used by the resolution-aware compatibility correction to obtain the live sprite world position |
 | `0x0057F1D0/D2` | Initial/current camera origin in tiles | Written by start-location decoding and `move_screen`; restored by `InitScreenPositions` |

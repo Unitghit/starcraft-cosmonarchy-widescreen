@@ -152,6 +152,7 @@ uint16_t GetExpandedStatusTooltipControlIndex();
 bool ShouldSuppressTranslatedHudCursorWarp();
 bool IsTranslatedMinimapDragActive();
 bool PresentedHudOwnsCursor();
+void SynchronizeWorldZoomPointer();
 
 #endif // SC_CONSOLE_H
 

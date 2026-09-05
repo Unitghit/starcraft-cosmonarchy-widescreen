@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.4.7'
+    [string]$Version = '0.5.0'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +52,7 @@ foreach ($marker in $diagnosticMarkers) {
     }
 }
 Write-Output 'Release diagnostic audit: PASS'
+& (Join-Path $PSScriptRoot 'verify-release-clean.ps1')
 
 & python (Join-Path $repository 'ZoomIntegration\verify_fixed_zoom.py')
 if ($LASTEXITCODE -ne 0) {
@@ -63,6 +64,16 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Menu scaler verification failed'
 }
 
+& python (Join-Path $repository 'ZoomIntegration\verify_world_zoom.py')
+if ($LASTEXITCODE -ne 0) {
+    throw 'Optional gameplay zoom verification failed'
+}
+
+& (Join-Path $repository 'ZoomIntegration\verify_world_zoom_native.ps1')
+& (Join-Path $repository 'ZoomIntegration\verify_ui_scale.ps1')
+& (Join-Path $repository 'ZoomIntegration\verify_panning_native.ps1')
+& (Join-Path $repository 'ZoomIntegration\verify_single_stage.ps1')
+
 & dotnet run --project (Join-Path $repository `
     'ViewportConfigurator.Tests\ViewportConfigurator.Tests.csproj') -c Release
 if ($LASTEXITCODE -ne 0) {
@@ -72,7 +83,7 @@ if ($LASTEXITCODE -ne 0) {
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 & dotnet publish (Join-Path $configurator 'CosmonarchyWidescreenSettings.csproj') `
     -c Release -r win-x64 --self-contained true `
-    -p:PublishSingleFile=true -o $output
+    -p:PublishSingleFile=true "-p:Version=$Version" -o $output
 if ($LASTEXITCODE -ne 0) {
     throw 'Configurator publish failed'
 }
@@ -109,6 +120,7 @@ Copy-Item -LiteralPath (Join-Path $repository 'LICENSE') `
     -Destination (Join-Path $bundleDirectory 'LICENSE.txt')
 Copy-Item -LiteralPath (Join-Path $repository 'THIRD-PARTY-NOTICES.md') `
     -Destination (Join-Path $bundleDirectory 'THIRD-PARTY-NOTICES.txt')
+& (Join-Path $PSScriptRoot 'verify-release-clean.ps1') -BundleDirectory $bundleDirectory
 
 if (Test-Path -LiteralPath $bundleArchive) {
     Remove-Item -LiteralPath $bundleArchive -Force

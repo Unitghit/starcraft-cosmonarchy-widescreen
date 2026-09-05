@@ -11,6 +11,7 @@
 #include "offsets.h"
 #include "scconsole.h"
 #include "runtime_diagnostics.h"
+#include "world_zoom.h"
 #include "yms.h"
 
 // Every fopen call in this translation unit writes diagnostic output.
@@ -48,6 +49,21 @@ namespace
     GptpSelectionBoundsPatchState gptp_selection_bounds_patch_state =
         GptpSelectionBoundsPatchState::WaitingForModule;
 
+    using SelectionSearch = Unit **(__fastcall *)(Rect16 *);
+    SelectionSearch original_selection_search;
+
+    Unit **__fastcall SearchVisibleSelection(Rect16 *bounds)
+    {
+        // Only the two same-type click callsites use this wrapper. Retain
+        // GPTP sorting, ownership rules and temporary-list stack management.
+        if (!world_zoom::Active())
+            return original_selection_search(bounds);
+        const auto visible = world_zoom::VisibleSelectionBounds(bounds->left, bounds->top);
+        Rect16 crop(static_cast<uint16_t>(visible.left), static_cast<uint16_t>(visible.top),
+                    static_cast<uint16_t>(visible.right), static_cast<uint16_t>(visible.bottom));
+        return original_selection_search(&crop);
+    }
+
     enum class GptpCursorWarpPatchState
     {
         WaitingForModule,
@@ -69,6 +85,34 @@ namespace
         GptpMinimapBoxPatchState::WaitingForModule;
     uint16_t *gptp_minimap_box_width;
     uint16_t *gptp_minimap_box_height;
+    uint32_t gptp_minimap_visible_origin_x;
+    uint32_t gptp_minimap_visible_origin_y;
+    uint32_t *gptp_minimap_visible_origin_x_pointer =
+        &gptp_minimap_visible_origin_x;
+    uint32_t *gptp_minimap_visible_origin_y_pointer =
+        &gptp_minimap_visible_origin_y;
+
+    using MinimapToWorld = void (__fastcall *)(uint16_t *, uint16_t *);
+    MinimapToWorld original_minimap_to_world;
+
+    void __fastcall ZoomMinimapToWorld(uint16_t *x, uint16_t *y)
+    {
+        if (!world_zoom::Active())
+        {
+            original_minimap_to_world(x, y);
+            return;
+        }
+        // Undo only this caller's native half-box subtraction. Let GPTP's
+        // existing helper own minimap offsets, map size, and divisor handling.
+        *x = static_cast<uint16_t>(*x + (*gptp_minimap_box_width >> 1));
+        *y = static_cast<uint16_t>(*y + (*gptp_minimap_box_height >> 1));
+        original_minimap_to_world(x, y);
+        const auto camera = world_zoom::CameraForMinimapPoint(*x, *y,
+            static_cast<uint32_t>(*bw::map_width_tiles) * 32,
+            static_cast<uint32_t>(*bw::map_height_tiles) * 32);
+        *x = static_cast<uint16_t>(camera.x);
+        *y = static_cast<uint16_t>(camera.y);
+    }
 
     enum class GptpUpgradeClearPatchState
     {
@@ -1608,6 +1652,9 @@ void EnsureGptpSelectionBounds()
     const uint32_t expanded_width = resolution::game_width;
     const uint32_t expanded_height = resolution::screen_height;
 
+    constexpr uintptr_t search_rva = 0x0000D020;
+    constexpr uintptr_t search_calls[] = {0x000B545C, 0x000B554D};
+
     uint8_t *base = reinterpret_cast<uint8_t *>(module);
     uint32_t *ctrl_width = reinterpret_cast<uint32_t *>(
         base + ctrl_width_rva);
@@ -1676,8 +1723,21 @@ void EnsureGptpSelectionBounds()
         *ctrl_shift_width == expanded_width &&
         *ctrl_shift_height == expanded_height;
 
+    bool search_matches = true;
+    for (const uintptr_t rva : search_calls)
+    {
+        int32_t relative = 0;
+        memcpy(&relative, base + rva + 1, sizeof(relative));
+        search_matches &= base[rva] == 0xE8 &&
+            static_cast<int64_t>(rva + 5) + relative == search_rva;
+    }
+    const uint8_t helper_prefix[] = {
+        0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x53, 0x56, 0x57,
+        0x89, 0x4D, 0xFC, 0xC7, 0x45, 0xF8, 0x80, 0xFF, 0x42, 0x00,
+    };
+    search_matches &= memcmp(base + search_rva, helper_prefix, sizeof(helper_prefix)) == 0;
     FILE *log = fopen("fixed_zoom_renderer.log", "a");
-    if (!signature_matches || (!original_bounds && !already_patched))
+    if (!signature_matches || !search_matches || (!original_bounds && !already_patched))
     {
         if (log)
         {
@@ -1696,11 +1756,12 @@ void EnsureGptpSelectionBounds()
         return;
     }
 
-    if (original_bounds)
+    // Install the static viewport dimensions and the two dynamic search
+    // callsites together after all signatures pass. No per-frame code writes.
     {
         uint8_t *patch_start = base + ctrl_width_rva - 2;
         const size_t patch_size =
-            ctrl_shift_height_rva + sizeof(uint32_t) -
+            search_calls[1] + 5 -
             (ctrl_width_rva - 2);
         DWORD old_protection = 0;
         if (!VirtualProtect(patch_start, patch_size, PAGE_EXECUTE_READWRITE,
@@ -1722,6 +1783,14 @@ void EnsureGptpSelectionBounds()
         *ctrl_height = expanded_height;
         *ctrl_shift_width = expanded_width;
         *ctrl_shift_height = expanded_height;
+        original_selection_search = reinterpret_cast<SelectionSearch>(base + search_rva);
+        for (const uintptr_t rva : search_calls)
+        {
+            const uint32_t relative = static_cast<uint32_t>(
+                reinterpret_cast<uintptr_t>(&SearchVisibleSelection) -
+                reinterpret_cast<uintptr_t>(base + rva + 5));
+            memcpy(base + rva + 1, &relative, sizeof(relative));
+        }
         FlushInstructionCache(GetCurrentProcess(), patch_start, patch_size);
         DWORD ignored = 0;
         VirtualProtect(patch_start, patch_size, old_protection, &ignored);
@@ -1866,12 +1935,17 @@ void EnsureGptpMinimapViewportBox()
             return;
 
         constexpr uintptr_t sequence_rva = 0x0002C5F0;
+        constexpr uintptr_t draw_sequence_rva = 0x0002C310;
+        constexpr uintptr_t minimap_converter_rva = 0x00010890;
         constexpr uintptr_t width_rva = 0x0026DC7C;
         constexpr uintptr_t height_rva = 0x0026D9DC;
+        constexpr uintptr_t camera_y_pointer_rva = 0x00259E94;
+        constexpr uintptr_t camera_x_pointer_rva = 0x00259E98;
         constexpr uint32_t mouse_x_address = 0x006CDDC4;
         constexpr uint32_t mouse_y_address = 0x006CDDC8;
         uint8_t *base = reinterpret_cast<uint8_t *>(module);
         uint8_t *sequence = base + sequence_rva;
+        uint8_t *draw_sequence = base + draw_sequence_rva;
 
         uint32_t width_operand = 0;
         uint32_t mouse_x_operand = 0;
@@ -1881,6 +1955,12 @@ void EnsureGptpMinimapViewportBox()
         memcpy(&mouse_x_operand, sequence + 0x13, sizeof(mouse_x_operand));
         memcpy(&height_operand, sequence + 0x20, sizeof(height_operand));
         memcpy(&mouse_y_operand, sequence + 0x2D, sizeof(mouse_y_operand));
+        uint32_t draw_camera_y_operand = 0;
+        uint32_t draw_camera_x_operand = 0;
+        memcpy(&draw_camera_y_operand, draw_sequence + 0x62,
+               sizeof(draw_camera_y_operand));
+        memcpy(&draw_camera_x_operand, draw_sequence + 0x84,
+               sizeof(draw_camera_x_operand));
 
         const uint8_t prologue[] = {
             0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08,
@@ -1895,10 +1975,22 @@ void EnsureGptpMinimapViewportBox()
             sequence[0x1F] == 0x0D &&
             sequence[0x2A] == 0x0F && sequence[0x2B] == 0xB7 &&
             sequence[0x2C] == 0x05 &&
+            sequence[0x48] == 0xE8 &&
+            static_cast<int64_t>(sequence_rva + 0x4D) +
+                *reinterpret_cast<const int32_t *>(sequence + 0x49) ==
+                    minimap_converter_rva &&
             width_operand == reinterpret_cast<uintptr_t>(base) + width_rva &&
             height_operand == reinterpret_cast<uintptr_t>(base) + height_rva &&
             mouse_x_operand == mouse_x_address &&
-            mouse_y_operand == mouse_y_address;
+            mouse_y_operand == mouse_y_address &&
+            draw_sequence[0x61] == 0xA1 &&
+            draw_sequence[0x66] == 0x33 &&
+            draw_sequence[0x67] == 0xD2 &&
+            draw_sequence[0x83] == 0xA1 &&
+            draw_camera_y_operand ==
+                reinterpret_cast<uintptr_t>(base) + camera_y_pointer_rva &&
+            draw_camera_x_operand ==
+                reinterpret_cast<uintptr_t>(base) + camera_x_pointer_rva;
 
         FILE *log = fopen("fixed_zoom_renderer.log", "a");
         if (!signature_matches)
@@ -1907,18 +1999,57 @@ void EnsureGptpMinimapViewportBox()
             {
                 fprintf(log,
                     "GPTP minimap viewport preflight failed: module=%p "
-                    "sequence=%p operands=(%08lX,%08lX,%08lX,%08lX)\n",
-                    module, sequence,
+                    "sequence=%p draw=%p operands=(%08lX,%08lX,%08lX,"
+                    "%08lX,%08lX,%08lX)\n",
+                    module, sequence, draw_sequence,
                     static_cast<unsigned long>(width_operand),
                     static_cast<unsigned long>(mouse_x_operand),
                     static_cast<unsigned long>(height_operand),
-                    static_cast<unsigned long>(mouse_y_operand));
+                    static_cast<unsigned long>(mouse_y_operand),
+                    static_cast<unsigned long>(draw_camera_x_operand),
+                    static_cast<unsigned long>(draw_camera_y_operand));
                 fclose(log);
             }
             gptp_minimap_box_patch_state =
                 GptpMinimapBoxPatchState::Incompatible;
             return;
         }
+
+        DWORD old_protection = 0;
+        uint8_t *draw_operand_start = draw_sequence + 0x62;
+        const SIZE_T draw_operand_span =
+            static_cast<SIZE_T>(sequence + 0x4D - draw_operand_start);
+        if (!VirtualProtect(draw_operand_start, draw_operand_span,
+                            PAGE_EXECUTE_READWRITE, &old_protection))
+        {
+            if (log)
+            {
+                fprintf(log,
+                    "GPTP minimap origin patch protection failed: "
+                    "error=%lu\n",
+                    static_cast<unsigned long>(GetLastError()));
+                fclose(log);
+            }
+            gptp_minimap_box_patch_state =
+                GptpMinimapBoxPatchState::Incompatible;
+            return;
+        }
+        *reinterpret_cast<uint32_t *>(draw_sequence + 0x62) =
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(
+                &gptp_minimap_visible_origin_y_pointer));
+        *reinterpret_cast<uint32_t *>(draw_sequence + 0x84) =
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(
+                &gptp_minimap_visible_origin_x_pointer));
+        original_minimap_to_world = reinterpret_cast<MinimapToWorld>(
+            base + minimap_converter_rva);
+        *reinterpret_cast<uint32_t *>(sequence + 0x49) =
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&ZoomMinimapToWorld) -
+                                  reinterpret_cast<uintptr_t>(sequence + 0x4D));
+        FlushInstructionCache(GetCurrentProcess(), draw_operand_start,
+                              draw_operand_span);
+        DWORD ignored = 0;
+        VirtualProtect(draw_operand_start, draw_operand_span,
+                       old_protection, &ignored);
 
         gptp_minimap_box_width = reinterpret_cast<uint16_t *>(
             base + width_rva);
@@ -1943,10 +2074,21 @@ void EnsureGptpMinimapViewportBox()
     if (zoom_level == 0)
         return;
 
+    // GPTP normally begins the white outline at the unzoomed camera origin.
+    // Feed its draw routine the actual cropped-world origin instead. These
+    // shadow values are read only by the verified outline routine; minimap
+    // input continues to use StarCraft's real camera globals.
+    gptp_minimap_visible_origin_x = *bw::screen_x +
+        world_zoom::SourceLeft();
+    gptp_minimap_visible_origin_y = *bw::screen_y +
+        world_zoom::SourceTop();
+
+    const uint32_t visible_width = world_zoom::VisibleWidth();
+    const uint32_t visible_height = world_zoom::VisibleHeight();
     const uint32_t calculated_width =
-        (resolution::game_width + zoom_level - 1) / zoom_level;
+        (visible_width + zoom_level - 1) / zoom_level;
     const uint32_t calculated_height =
-        (resolution::game_height + 16 + zoom_level - 1) / zoom_level;
+        (visible_height + 16 + zoom_level - 1) / zoom_level;
     const uint16_t desired_width = static_cast<uint16_t>(
         calculated_width >= 2 ? calculated_width : 2);
     const uint16_t desired_height = static_cast<uint16_t>(

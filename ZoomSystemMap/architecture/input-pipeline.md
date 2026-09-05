@@ -1,7 +1,9 @@
 # Input pipeline
 
 The input system preserves physical expanded coordinates over the battlefield
-and performs targeted translation only for relocated native UI.
+and performs targeted translation only for relocated native UI. When optional
+gameplay zoom is enabled, battlefield points alone receive an additional
+presented-to-source transform.
 
 ## Event flow
 
@@ -9,7 +11,7 @@ and performs targeted translation only for relocated native UI.
 Windows mouse message
   -> ConsoleWndProc records raw physical point
   -> classify battlefield / relocated HUD / popup / obsolete native HUD
-  -> translate only if native UI owns the pixel
+  -> translate native UI or inverse-transform an enabled world zoom
   -> StarCraft dialog dispatch
   -> gameplay click callback correction when a decoy point was required
   -> restore engine mouse globals to the real physical point
@@ -21,7 +23,11 @@ Windows mouse message
 ### Battlefield
 
 Points inside the output are forwarded one-to-one unless the relocated HUD
-owns them. Selection, placement, cursor hover, drag clipping, and
+owns them or optional gameplay zoom is enabled. With zoom enabled,
+`world_zoom::PresentedToSource` maps the visible point into the centered world
+crop before StarCraft performs hover, selection, order, or placement logic.
+The prepared cursor receives the inverse offset so it remains at the physical
+pointer. Selection, placement, cursor hover, drag clipping, and
 unit-collection bounds use the full output height so the visible side gutters
 remain gameplay-active. The centered HUD still intercepts its complete bottom
 row before any gameplay callback.
@@ -33,6 +39,10 @@ coordinates. This lets StarCraft finalize a battlefield selection rectangle
 when the pointer is released over the bottom HUD. A sequence that begins on
 the HUD retains native HUD ownership, including minimap capture.
 
+The first and last physical battlefield pixels retain StarCraft's original
+edge-scroll coordinates. The zoomed crop slides toward map boundaries, so
+click and hover transforms remain aligned with the terrain visible there.
+
 Stable GPTP replaces StarCraft's same-type selection routine and builds its
 own visible-unit rectangle for both modifier branches. The four verified
 640x400 immediates are replaced at runtime with `game_width` and
@@ -40,6 +50,12 @@ own visible-unit rectangle for both modifier branches. The four verified
 viewport. The stable GPTP file on disk is not changed.
 
 ### Bottom-centered HUD
+
+Optional HUD sizing uses the precomputed `ui_scale::hud` presentation geometry.
+All presented HUD event and tooltip/menu lookups inverse-map through it.
+Cursor correction is the actual physical point minus forwarded native point,
+not a fixed translation. Native masks, dialog bounds, minimap storage and
+hidden legacy-area suppression stay native. See [HUD sizing](../features/hud-sizing.md).
 
 The native STrans mask decides whether a pixel belongs to solid HUD artwork or
 to a transparent gap showing terrain. Solid pixels are translated into native

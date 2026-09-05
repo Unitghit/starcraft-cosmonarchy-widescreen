@@ -9,6 +9,23 @@ internal sealed class MainForm : Form
     private readonly ComboBox aspectBox = NewComboBox();
     private readonly ComboBox profileBox = NewComboBox();
     private readonly ComboBox topTextLayoutBox = NewComboBox();
+    private readonly ComboBox hudSizeBox = NewComboBox();
+    private readonly ComboBox topTextSizeBox = NewComboBox();
+    private readonly CheckBox separateTopTextSizeBox = new()
+    {
+        Text = "Separate top text size", AutoSize = true, Anchor = AnchorStyles.Left,
+    };
+    private readonly ComboBox worldZoomBox = NewComboBox();
+    private readonly ComboBox zoomTransitionBox = NewComboBox();
+    private readonly ComboBox extraZoomBox = NewComboBox();
+    private readonly ComboBox zoomRendererBox = NewComboBox();
+    private readonly ComboBox worldEdgesBox = NewComboBox();
+    private readonly CheckBox highRefreshPointerBox = new()
+    {
+        Text = "High-refresh cursor and selection", AutoSize = true, Anchor = AnchorStyles.Left,
+    };
+    private readonly ComboBox startingZoomBox = NewComboBox();
+    private Size startingZoomProfile;
     private readonly ComboBox presentationBox = NewComboBox();
     private readonly ComboBox scaleBox = NewComboBox();
     private readonly ComboBox displayBox = NewComboBox();
@@ -32,8 +49,8 @@ internal sealed class MainForm : Form
     };
     private readonly Label summaryLabel = new()
     {
-        AutoSize = false,
-        Height = 52,
+        Name = "ResolutionSummary",
+        AutoSize = true,
         Dock = DockStyle.Fill,
         TextAlign = ContentAlignment.MiddleLeft,
         Font = new Font(SystemFonts.MessageBoxFont!.FontFamily, 10,
@@ -41,8 +58,8 @@ internal sealed class MainForm : Form
     };
     private readonly Label warningLabel = new()
     {
-        AutoSize = false,
-        Height = 38,
+        Name = "ResolutionWarning",
+        AutoSize = true,
         Dock = DockStyle.Fill,
         ForeColor = Color.DarkGoldenrod,
     };
@@ -63,10 +80,12 @@ internal sealed class MainForm : Form
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
         var dpiScale = DeviceDpi / 96f;
+        var workingArea = Screen.FromPoint(Cursor.Position).WorkingArea;
         MinimumSize = new Size((int)Math.Ceiling(690 * dpiScale),
-            (int)Math.Ceiling(680 * dpiScale));
+            Math.Min((int)Math.Ceiling(420 * dpiScale), workingArea.Height));
         ClientSize = new Size((int)Math.Ceiling(690 * dpiScale),
-            (int)Math.Ceiling(680 * dpiScale));
+            Math.Min((int)Math.Ceiling(760 * dpiScale),
+                workingArea.Height - (int)Math.Ceiling(48 * dpiScale)));
         Font = SystemFonts.MessageBoxFont;
 
         BuildInterface();
@@ -80,19 +99,40 @@ internal sealed class MainForm : Form
     {
         var outer = new TableLayoutPanel
         {
+            Name = "SettingsLayout",
             Dock = DockStyle.Fill,
             Padding = new Padding(18),
             ColumnCount = 1,
-            RowCount = 7,
-            AutoScroll = true,
+            RowCount = 2,
+            Margin = Padding.Empty,
         };
-        outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         outer.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        // Only settings scroll. A separate, opaque footer owns its layout space,
+        // so even keyboard-driven scrolling cannot move or cover the actions.
+        var scroll = new SettingsScrollPanel
+        {
+            Name = "SettingsScroll",
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            Margin = Padding.Empty,
+            TabIndex = 0,
+        };
+        var content = new TableLayoutPanel
+        {
+            Name = "SettingsContent",
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            RowCount = 6,
+            Margin = Padding.Empty,
+        };
+        content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        for (var row = 0; row < content.RowCount; ++row)
+            content.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         var title = new Label
         {
@@ -101,20 +141,56 @@ internal sealed class MainForm : Form
             Font = new Font(Font.FontFamily, 16, FontStyle.Bold),
             Margin = new Padding(0, 0, 0, 14),
         };
-        outer.Controls.Add(title);
-        outer.Controls.Add(BuildInstallationGroup());
-        outer.Controls.Add(BuildInternalGroup());
-        outer.Controls.Add(BuildPresentationGroup());
+        content.Controls.Add(title);
+        content.Controls.Add(BuildInstallationGroup());
+        content.Controls.Add(BuildInternalGroup());
+        content.Controls.Add(BuildHudGroup());
+        content.Controls.Add(BuildWorldZoomGroup());
+        content.Controls.Add(BuildPresentationGroup());
 
-        var summaryPanel = new Panel { Dock = DockStyle.Fill, Height = 96 };
-        summaryPanel.Controls.Add(warningLabel);
-        summaryPanel.Controls.Add(summaryLabel);
-        warningLabel.Dock = DockStyle.Bottom;
-        summaryLabel.Dock = DockStyle.Top;
-        outer.Controls.Add(summaryPanel);
-        outer.Controls.Add(new Panel { Dock = DockStyle.Fill });
-        outer.Controls.Add(BuildButtons());
+        scroll.Controls.Add(content);
+        outer.Controls.Add(scroll, 0, 0);
+        var footer = BuildButtons();
+        footer.TabIndex = 1;
+        outer.Controls.Add(footer, 0, 1);
+        footer.BringToFront();
         Controls.Add(outer);
+    }
+
+    private GroupBox BuildHudGroup()
+    {
+        var group = NewGroup("HUD size");
+        var grid = NewGrid();
+        grid.Controls.Add(NewLabel("HUD size:"), 0, 0);
+        grid.Controls.Add(hudSizeBox, 1, 0);
+        grid.Controls.Add(separateTopTextSizeBox, 1, 1);
+        grid.Controls.Add(NewLabel("Top text size:"), 0, 2);
+        grid.Controls.Add(topTextSizeBox, 1, 2);
+        grid.Controls.Add(NewLabel("Top text layout:"), 0, 3);
+        grid.Controls.Add(topTextLayoutBox, 1, 3);
+        group.Controls.Add(grid);
+        return group;
+    }
+
+    private GroupBox BuildWorldZoomGroup()
+    {
+        var group = NewGroup("Gameplay zoom");
+        var grid = NewGrid();
+        grid.Controls.Add(NewLabel("Mouse-wheel zoom:"), 0, 0);
+        grid.Controls.Add(worldZoomBox, 1, 0);
+        grid.Controls.Add(NewLabel("Zoom transition:"), 0, 1);
+        grid.Controls.Add(zoomTransitionBox, 1, 1);
+        grid.Controls.Add(NewLabel("Starting view:"), 0, 2);
+        grid.Controls.Add(startingZoomBox, 1, 2);
+        grid.Controls.Add(NewLabel("Extra zoom-in range:"), 0, 3);
+        grid.Controls.Add(extraZoomBox, 1, 3);
+        grid.Controls.Add(NewLabel("Zoom rendering:"), 0, 4);
+        grid.Controls.Add(zoomRendererBox, 1, 4);
+        grid.Controls.Add(NewLabel("World pixel edges:"), 0, 5);
+        grid.Controls.Add(worldEdgesBox, 1, 5);
+        grid.Controls.Add(highRefreshPointerBox,1,6);
+        group.Controls.Add(grid);
+        return group;
     }
 
     private GroupBox BuildInstallationGroup()
@@ -157,15 +233,13 @@ internal sealed class MainForm : Form
         customDimensions.Controls.Add(customHeightBox);
         grid.Controls.Add(NewLabel("Custom internal:"), 0, 2);
         grid.Controls.Add(customDimensions, 1, 2);
-        grid.Controls.Add(NewLabel("Top text layout:"), 0, 3);
-        grid.Controls.Add(topTextLayoutBox, 1, 3);
         group.Controls.Add(grid);
         return group;
     }
 
     private GroupBox BuildPresentationGroup()
     {
-        var group = NewGroup("External presentation and display");
+        var group = NewGroup("Window & display");
         var grid = NewGrid();
         grid.Controls.Add(NewLabel("Display:"), 0, 0);
         grid.Controls.Add(displayBox, 1, 0);
@@ -173,7 +247,7 @@ internal sealed class MainForm : Form
         grid.Controls.Add(windowModeBox, 1, 1);
         grid.Controls.Add(NewLabel("Output mode:"), 0, 2);
         grid.Controls.Add(presentationBox, 1, 2);
-        grid.Controls.Add(NewLabel("Presentation scale:"), 0, 3);
+        grid.Controls.Add(NewLabel("Window scale:"), 0, 3);
         grid.Controls.Add(scaleBox, 1, 3);
 
         var dimensions = new FlowLayoutPanel
@@ -202,14 +276,31 @@ internal sealed class MainForm : Form
     {
         var panel = new TableLayoutPanel
         {
+            Name = "ActionFooter",
             Dock = DockStyle.Fill,
             AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = SystemColors.Control,
+            Margin = Padding.Empty,
+            Padding = new Padding(0, 8, 0, 0),
             ColumnCount = 2,
-            RowCount = 2,
+            RowCount = 4,
         };
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        panel.Controls.Add(statusLabel, 0, 0);
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.Controls.Add(summaryLabel, 0, 0);
+        panel.SetColumnSpan(summaryLabel, 2);
+        panel.Controls.Add(warningLabel, 0, 1);
+        panel.SetColumnSpan(warningLabel, 2);
+        warningLabel.Visible = !string.IsNullOrEmpty(warningLabel.Text);
+        warningLabel.TextChanged += (_, _) =>
+            warningLabel.Visible = !string.IsNullOrEmpty(warningLabel.Text);
+        statusLabel.MinimumSize = new Size(0, 26);
+        panel.Controls.Add(statusLabel, 0, 2);
         panel.SetColumnSpan(statusLabel, 2);
 
         var restore = new Button
@@ -219,11 +310,12 @@ internal sealed class MainForm : Form
             MinimumSize = new Size(125, 34),
         };
         restore.Click += (_, _) => RestoreOriginal();
-        panel.Controls.Add(restore, 0, 1);
+        panel.Controls.Add(restore, 0, 3);
 
         var actions = new FlowLayoutPanel
         {
             AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
         };
@@ -243,7 +335,7 @@ internal sealed class MainForm : Form
         saveAndPlay.Click += (_, _) => Save(true);
         actions.Controls.Add(save);
         actions.Controls.Add(saveAndPlay);
-        panel.Controls.Add(actions, 1, 1);
+        panel.Controls.Add(actions, 1, 3);
         return panel;
     }
 
@@ -308,6 +400,28 @@ internal sealed class MainForm : Form
             "Screen edges",
         });
         topTextLayoutBox.SelectedIndex = 0;
+        hudSizeBox.Items.AddRange(HudSizeOptions.Choices());
+        topTextSizeBox.Items.AddRange(HudSizeOptions.Choices());
+        hudSizeBox.SelectedIndex = topTextSizeBox.SelectedIndex = 0;
+        topTextSizeBox.Enabled = false;
+        separateTopTextSizeBox.CheckedChanged += (_, _) =>
+            topTextSizeBox.Enabled = separateTopTextSizeBox.Checked;
+
+        worldZoomBox.Items.AddRange(new object[]
+        {
+            new WorldZoomChoice(false, "Disabled"),
+            new WorldZoomChoice(true, "Enabled"),
+        });
+        worldZoomBox.SelectedIndex = 0;
+        zoomTransitionBox.Items.AddRange(new object[] { "Smooth", "Instant" });
+        zoomTransitionBox.SelectedIndex = 0;
+        extraZoomBox.Items.AddRange(new object[] { "Off", "50% more", "100% more (Default)" });
+        extraZoomBox.SelectedIndex = 2;
+        zoomRendererBox.Items.AddRange(new object[] { "Standard", "Pixel-perfect" });
+        zoomRendererBox.SelectedIndex = 1;
+        worldEdgesBox.Items.AddRange(new object[] { "Sharp", "Smooth pixel edges (Default)" });
+        worldEdgesBox.SelectedIndex = 1;
+        startingZoomBox.DropDownWidth = 440;
 
         aspectBox.SelectedIndexChanged += (_, _) =>
         {
@@ -318,7 +432,8 @@ internal sealed class MainForm : Form
             UpdateCalculatedOutput();
         };
         foreach (var box in new[]
-                 { profileBox, topTextLayoutBox, presentationBox, scaleBox,
+                 { profileBox, topTextLayoutBox, worldZoomBox, zoomTransitionBox, zoomRendererBox, worldEdgesBox, startingZoomBox,
+                   presentationBox, scaleBox,
                    displayBox, windowModeBox, filterBox })
             box.SelectedIndexChanged += (_, _) => UpdateCalculatedOutput();
         customWidthBox.ValueChanged += (_, _) => UpdateCalculatedOutput();
@@ -332,7 +447,14 @@ internal sealed class MainForm : Form
     private void LoadSavedSettings()
     {
         var viewport = service.ReadSavedViewport();
+        var worldZoom = service.ReadSavedWorldZoom();
+        extraZoomBox.SelectedIndex = WorldZoomOptions.ReadExtraZoomPercent(worldZoom) / 50;
+        var uiSize = service.ReadSavedUiSize();
+        SelectHudSize(hudSizeBox, HudSizeOptions.ReadReference(uiSize, "hud_reference_height"));
+        SelectHudSize(topTextSizeBox, HudSizeOptions.ReadReference(uiSize, "top_reference_height"));
+        separateTopTextSizeBox.Checked = HudSizeOptions.ReadSeparate(uiSize);
         var presentation = service.ReadSavedPresentation();
+        zoomRendererBox.SelectedIndex = WorldZoomOptions.ReadPixelPerfectRendering(presentation) ? 1 : 0;
         if (viewport.Count == 0 || presentation.Count == 0)
             return;
 
@@ -373,6 +495,13 @@ internal sealed class MainForm : Form
             topTextLayoutBox.SelectedIndex = topTextLayout.Equals(
                 "screen_edges", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         }
+        if (worldZoom.TryGetValue("enabled", out var zoomEnabled))
+            worldZoomBox.SelectedIndex = zoomEnabled == "1" ? 1 : 0;
+        zoomTransitionBox.SelectedIndex = worldZoom.TryGetValue("transition", out var transition) &&
+            transition.Equals("instant", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        var zoomProfile = GetSelectedProfile();
+        PopulateStartingZoom(zoomProfile,
+            WorldZoomOptions.ReadStartUnits(worldZoom, zoomProfile.Width));
         if (presentation.TryGetValue("mode", out var mode))
         {
             presentationBox.SelectedIndex = mode switch
@@ -414,6 +543,8 @@ internal sealed class MainForm : Form
         SetNumericFromSection(presentation, "output_height", outputHeightBox);
         if (presentation.TryGetValue("filter", out var filter))
             filterBox.SelectedIndex = filter == "smooth" ? 1 : 0;
+        worldEdgesBox.SelectedIndex = WorldZoomOptions.ReadSmoothWorldEdges(presentation) ? 1 : 0;
+        highRefreshPointerBox.Checked = WorldZoomOptions.ReadHighRefreshPointer(presentation);
         if (presentation.TryGetValue("preserve_aspect_ratio", out var preserve) &&
             bool.TryParse(preserve, out var parsedPreserve))
             preserveAspectBox.Checked = parsedPreserve;
@@ -467,6 +598,14 @@ internal sealed class MainForm : Form
 
         var profile = GetSelectedProfile();
         var custom = profile.AspectRatio == "Custom";
+        if (startingZoomProfile != new Size(profile.Width, profile.Height))
+            PopulateStartingZoom(profile, GetStartingZoomUnits());
+        zoomTransitionBox.Enabled = IsWorldZoomEnabled();
+        extraZoomBox.Enabled = IsWorldZoomEnabled();
+        zoomRendererBox.Enabled = true;
+        worldEdgesBox.Enabled = zoomRendererBox.SelectedIndex == 1;
+        highRefreshPointerBox.Enabled = zoomRendererBox.SelectedIndex == 1;
+        startingZoomBox.Enabled = IsWorldZoomEnabled();
         customWidthBox.Enabled = custom;
         customHeightBox.Enabled = custom;
 
@@ -495,7 +634,8 @@ internal sealed class MainForm : Form
         summaryLabel.Text =
             $"{profile.Width} x {profile.Height} internal  →  " +
             $"{output.Width} x {output.Height} external  " +
-            $"({effectiveScaleX:0.##}x × {effectiveScaleY:0.##}x)";
+            $"({effectiveScaleX:0.##}x × {effectiveScaleY:0.##}x)  " +
+            $"Mouse-wheel zoom: {(IsWorldZoomEnabled() ? "Enabled" : "Disabled")}";
 
         warningLabel.Text = string.Empty;
         if (windowMode == WindowMode.Windowed &&
@@ -522,7 +662,7 @@ internal sealed class MainForm : Form
         }
     }
 
-    private ViewportSettings BuildSettings()
+    internal ViewportSettings BuildSettings()
     {
         var profile = GetSelectedProfile();
         var display = (DisplayChoice)displayBox.SelectedItem!;
@@ -538,8 +678,56 @@ internal sealed class MainForm : Form
                 ScalingFilter.NearestNeighbor,
             preserveAspectBox.Checked, display,
             topTextLayoutBox.SelectedIndex == 1 ? TopTextLayout.ScreenEdges :
-                TopTextLayout.Centered4x3);
+                TopTextLayout.Centered4x3,
+            IsWorldZoomEnabled(), zoomTransitionBox.SelectedIndex != 1,
+            GetStartingZoomUnits(), zoomRendererBox.SelectedIndex == 1,
+            (hudSizeBox.SelectedItem as HudSizeChoice)?.ReferenceHeight ?? 0,
+            separateTopTextSizeBox.Checked,
+            (topTextSizeBox.SelectedItem as HudSizeChoice)?.ReferenceHeight ?? 0,
+            worldEdgesBox.SelectedIndex == 1,
+            highRefreshPointerBox.Checked,
+            Math.Max(0, extraZoomBox.SelectedIndex) * 50);
     }
+
+    private static void SelectHudSize(ComboBox box, int reference)
+    {
+        var choice = box.Items.Cast<HudSizeChoice>().FirstOrDefault(x => x.ReferenceHeight == reference);
+        if (choice is null)
+        {
+            choice = new HudSizeChoice(reference, $"{reference}p-sized (custom)");
+            box.Items.Add(choice);
+        }
+        box.SelectedItem = choice;
+    }
+
+    private int GetStartingZoomUnits() =>
+        (startingZoomBox.SelectedItem as StartingZoomChoice)?.Units ?? WorldZoomOptions.BaseUnits;
+
+    private void PopulateStartingZoom(RendererProfile profile, int selected)
+    {
+        var previousLoading = loading;
+        loading = true;
+        startingZoomBox.BeginUpdate();
+        try
+        {
+            var choices = WorldZoomOptions.Choices(profile.Width, profile.Height, selected);
+            startingZoomBox.Items.Clear();
+            startingZoomBox.Items.AddRange(choices.Cast<object>().ToArray());
+            var clamped = Math.Clamp(selected, WorldZoomOptions.BaseUnits,
+                WorldZoomOptions.MaximumStartUnits(profile.Width));
+            startingZoomBox.SelectedItem = choices.First(choice => choice.Units == clamped);
+            startingZoomProfile = new Size(profile.Width, profile.Height);
+        }
+        finally
+        {
+            startingZoomBox.EndUpdate();
+            loading = previousLoading;
+        }
+    }
+
+    private bool IsWorldZoomEnabled() =>
+        worldZoomBox.SelectedItem is WorldZoomChoice choice ?
+            choice.Enabled : false;
 
     private RendererProfile GetSelectedProfile()
     {
@@ -681,7 +869,7 @@ internal sealed class MainForm : Form
             control.Value = Math.Clamp(value, control.Minimum, control.Maximum);
     }
 
-    private static ComboBox NewComboBox() => new()
+    private static ComboBox NewComboBox() => new PageScrollComboBox()
     {
         DropDownStyle = ComboBoxStyle.DropDownList,
         Dock = DockStyle.Fill,

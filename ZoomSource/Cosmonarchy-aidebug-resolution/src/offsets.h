@@ -280,6 +280,10 @@ namespace bw
     const offset<Rect16> selection_box = 0x0066FF50;
     const offset<uint8_t> is_drag_selecting = 0x0066FF5C;
     const offset<uint8_t> selection_box_color = 0x006CEB32;
+    // 0046EEF0 compares event X/Y against these before sorting selection_box.
+    const offset<int16_t> selection_anchor_x = 0x0066FF4C;
+    const offset<int16_t> selection_anchor_y = 0x0066FF4E;
+    const offset<uint32_t> cursor_animation_frame = 0x00597390;
 
     const offset<uint8_t> shift_down = 0x00596A28;
     const offset<uint8_t> ctrl_down = 0x00596A29;

@@ -42,8 +42,11 @@ remains 640x480 with a nominal 640x400 game viewport.
   - [Building-placement case study](features/building-placement.md)
   - [Gameplay hover cursor](features/cursor-hover.md)
   - [Legacy HUD tooltip duplicates](features/legacy-hud-tooltips.md)
+  - [Independent HUD and top-text sizing](features/hud-sizing.md)
   - [Positional audio](features/positional-audio.md)
   - [Presentation-only rational scaling](features/presentation-scaling.md)
+  - [Optional gameplay zoom](features/world-zoom.md)
+  - [Single-stage world presentation design](features/single-stage-world-presentation.md)
   - [Portable widescreen configurator](features/portable-configurator.md)
 - Reverse engineering
   - [Functions and globals](reverse-engineering/functions-and-globals.md)
@@ -57,6 +60,8 @@ remains 640x480 with a nominal 640x400 game viewport.
   - [Regression checklist](testing/regression-checklist.md)
   - [Resolution matrix](testing/resolution-matrix.md)
 - Optimization
+  - [Panning artifact audit](optimization/panning-artifact-audit.md)
+  - [Gameplay zoom audit](optimization/world-zoom-audit.md)
   - [Performance optimization audit](optimization/performance-audit.md)
 
 ## Current implementation anchors
@@ -65,6 +70,7 @@ remains 640x480 with a nominal 640x400 game viewport.
 |---|---|
 | Shared resolution configuration | `ZoomSource\zoom_resolution.h` |
 | Presentation configuration | `ZoomPresentation` |
+| Optional gameplay zoom | `src\world_zoom.cpp` and `[world_zoom]` runtime settings |
 | Renderer source | `ZoomSource\Cosmonarchy-aidebug-resolution` |
 | Renderer branch / baseline | `development` / tested checkpoint `dd90143` |
 | GPTP reference source | `ZoomSource\Cosmonarchy-GPTP` |
@@ -75,6 +81,7 @@ remains 640x480 with a nominal 640x400 game viewport.
 | Portable configurator | `Release\Cosmonarchy Widescreen Settings.exe` |
 | Build/install owner | `ViewportConfigurator` |
 | Geometry verifier | `ZoomIntegration\verify_fixed_zoom.py` |
+| Gameplay zoom verifier | `ZoomIntegration\verify_world_zoom.py` |
 | System-map validator | `ZoomSystemMap\validate-system-map.ps1` |
 
 Hashes describe this snapshot, not a permanent compatibility contract. Always

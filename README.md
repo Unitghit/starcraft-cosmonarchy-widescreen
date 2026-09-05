@@ -4,6 +4,12 @@ StarCraft Cosmonarchy Widescreen is a resolution changer for Cosmonarchy with
 widescreen support, custom resolutions, independent display scaling, windowed
 and fullscreen modes, and adjustable top UI layouts.
 
+An optional mouse-wheel gameplay zoom can magnify the world with smooth
+transitions while keeping the HUD, menus, top text, and external window size
+unchanged. It is disabled by default and has its own selector in the settings
+program. You can also resize the HUD and top text independently, smooth world
+pixel edges, and enable high-refresh cursor and selection-box movement.
+
 It includes a small Windows configurator. Internal gameplay resolution and
 external window size can be adjusted independently.
 
@@ -25,7 +31,9 @@ changes anything.
 - Internal resolution: `1280 x 720`
 - External scale: choose the size that fits your display
 - Window mode: windowed or borderless fullscreen
-- Filter: nearest neighbor for sharp pixels
+- Zoom rendering: Pixel-perfect
+- World pixel edges: Smooth pixel edges
+- Gameplay zoom: off, unless you want a closer world view
 
 Internal resolutions up to 4K and custom resolutions are supported. High
 internal resolutions can take several minutes to load because the original

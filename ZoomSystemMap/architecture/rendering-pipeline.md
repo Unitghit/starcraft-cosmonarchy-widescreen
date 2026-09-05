@@ -45,13 +45,10 @@ graphics that would otherwise repeat once per camera tile.
 
 StarCraft's `MoveScreen` routine floors both camera axes to an eight-pixel
 boundary. Vertical private-pass source crops are derived from that effective
-camera position, not the unrounded request. Horizontally, a resolution such as
-1280 uses two complete 640-pixel columns and therefore has no spare source
-width for a sub-eight-pixel crop. Private world passes restore their requested
-exact x after `MoveScreen` updates camera bookkeeping, then rebuild visible
-sprite rows. The correction cannot cross a 32-pixel tile boundary. This makes
-every one-pixel horizontal camera update produce a new composed battlefield
-without adding a third private column or increasing render-pass count.
+camera position, not the unrounded request. Private world passes restore their
+requested exact x after `MoveScreen` updates camera bookkeeping, then rebuild
+visible-sprite rows. The correction cannot cross a 32-pixel tile boundary.
+This preserves the established one-pixel horizontal camera behavior.
 
 The outer camera is different from a private-pass camera. Cosmonarchy's
 middle-button panner can preserve positions between those eight-pixel
@@ -60,14 +57,26 @@ camera-dependent redraw state, then writes the saved exact outer x/y back
 before rebuilding visible-sprite rows. This preserves smooth one-pixel camera
 motion without changing the aligned geometry used by private native renders.
 
-At full-width private columns, such as the two 640-pixel passes used for
-1280x720, consecutive-frame captures proved that StarCraft can leave the final
-four columns of a pass stale during middle-button motion. There is no horizontal
-overlap available to hide that edge. While the gesture is active, the composer
-repairs only those four columns at each internal boundary from the previous
-repaired world frame, translated by the exact camera delta. Other columns and
-resolutions with overlapping passes keep their normal path, and the repair adds
-no render passes.
+Consecutive-frame captures previously showed stale final columns in full-width
+native passes during middle-button motion. A historical workaround copied four
+columns from the preceding repaired frame. The offline
+[panning artifact audit](../optimization/panning-artifact-audit.md) proved that
+this could recursively retain disappeared sprites and other old world pixels.
+
+The replacement derives tile widths from a 624-pixel safe budget inside the
+unchanged 640-pixel native surface. `resolution::PlanWorldPassX` is shared by
+both world composition paths and leaves at least eight pixels of right margin
+on unclamped passes. Internal joins use current-frame overlapping coverage.
+The map's physical right boundary can still use the native final column, with
+an aligned map-edge camera; it is not an internal tile join. Native raster
+correctness at that boundary remains part of live testing.
+
+There is no previous-world-frame allocation, copy, or gesture-dependent seam
+repair. At 1280x720 the world grid is 3x3 (432x240 tiles), and at 1920x1080 it
+is 4x4 (480x272 tiles). The pass count grows from 6 to 9 and 12 to 16,
+respectively. 1600x900 retains its existing 3x4 grid. These are structural
+costs, not measured frame-time changes. Offline coverage and synthetic fresh
+pixel tests pass; live visual and performance confirmation is pending.
 
 Middle-mouse panning uses a fresh matched world and UI comparison pair while
 the gesture is active and whenever the saved outer camera has a remainder
@@ -93,6 +102,25 @@ over the bottom interface. Gesture ownership is the union of the physical
 middle-button state and the active mouse-move callback at `0x005968AC`. The
 callback may be the verified native function at `0x00484460` or the
 resolution-aware replacement described in `architecture/input-pipeline.md`.
+
+## Optional world zoom stage
+
+The default zoom renderer, [Pixel-perfect](../features/single-stage-world-presentation.md),
+retains the raw crop before this stage and submits it with separate logical UI
+coverage to a final-output adapter. The ordinary indexed path below remains
+the Standard-mode and per-frame fallback, including translucent dialogs.
+
+When explicitly enabled, `src/world_zoom.cpp` transforms the completed
+battlefield after private world composition and before UI composition. A
+centered source crop is scaled back to `game_width x game_height`. Terrain,
+units, placement ghosts, rally graphics, and other map-space layers therefore
+share one transform. HUD, top text, popup controls, tooltips, selection border,
+and cursor remain screen-space layers and are drawn afterward at normal size.
+
+The source crop becomes edge-aware near map boundaries. Its current transform
+is shared with input and minimap-outline code. Wheel steps set discrete target
+levels, while the source crop follows them with a 120 millisecond integer
+quadratic ease-out transition. See `features/world-zoom.md`.
 
 ## Replay player colors
 
@@ -155,6 +183,8 @@ pixels.
   visibility on alternating frames, the renderer reuses the identical cached
   surface and live bounds while the status-control envelope remains active.
 - The drag-selection rectangle is drawn once from the engine's inclusive box.
+  With gameplay zoom enabled, its source-space corners are converted to
+  presented coordinates first.
 - The cursor layer is drawn once against an expanded `Surface` and clip.
 
 ## Presentation

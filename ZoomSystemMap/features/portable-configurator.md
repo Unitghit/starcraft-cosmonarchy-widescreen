@@ -15,6 +15,42 @@ same universal renderer payload.
 
 ## Ownership
 
+### Scrollable settings and fixed actions
+
+`MainForm.BuildInterface` uses a non-scrolling root with two rows: a fill-sized
+`SettingsScroll` panel and an auto-sized, opaque `ActionFooter`. Only the
+settings content uses vertical scrolling; its preferred height is independent
+of the available viewport. Footer status, Restore Original, Save and Save &
+Play remain outside that scroll surface. Layout allocates separate rectangles,
+so settings cannot cover or push the actions outside the client area.
+
+The minimum window height is 420 logical pixels, with startup height bounded
+by the display working area. Native WinForms scrolling handles overflow and
+keyboard focus. No game configuration semantics or renderer changes.
+Configurator tests check compact/normal/wide windows, scrollbar visibility
+and disappearance, absence of horizontal scrolling, final-row reachability,
+footer/button containment and unchanged settings after resizing/scrolling.
+The resolution summary and its warnings now occupy separate auto-sized footer
+rows above status/actions, outside the scrolling surface. Text wraps to the
+available width, and empty warnings collapse. Layout tests check stationary
+summary bounds, long-warning containment, and no overlap with settings/buttons.
+
+`PageScrollControls.cs` makes every dropdown a `PageScrollComboBox`. Its wheel
+handler skips normal value-selection handling, marks the event handled, and
+forwards it to the ancestor `SettingsScrollPanel`. Open lists close first so
+they cannot float over a scrolled-away field. Click/keyboard selection and
+numeric fields remain unchanged. No global message filter or game input hook.
+Tests send native WM_MOUSEWHEEL in both directions to every dropdown, open
+and closed, asserting no selection events, page movement and a stationary footer.
+
+Local handoff, 2026-09-04: all 16 configurator checks pass, including rendered
+compact/normal-window inspection at the host's 200% DPI. Updated the Windows
+Release configurator only (SHA-256
+`25A409D85156230FC242D064798D7527DF25212795109122F17B83F5EAB8BA8E`).
+Viewport INI, wrapper INI and installed renderer hashes remained unchanged.
+Previous GUI is backed up under `ZoomIntegration/backups/gui-scroll-20260904-203007`.
+No public release was created; interactive user acceptance is pending.
+
 | Artifact | Configurator action |
 |---|---|
 | `plugins/aize_debug.qdp` | Back up once, install embedded universal renderer, verify hash |

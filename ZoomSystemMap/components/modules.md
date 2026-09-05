@@ -51,6 +51,23 @@ Owns:
 - expanded input routing and diagnostics;
 - guarded StarCraft and stable-GPTP compatibility patches.
 
+## optional gameplay zoom subsystem
+
+Final-output sampling is isolated in `src/single_stage.cpp`,
+`src/single_stage_portable.cpp`, and `src/single_stage_frame.h`. The shader is
+built from `src/single_stage.hlsl`. Named Pixel-perfect in the GUI and default
+when zoom is enabled, this backend uses the public
+graphics interfaces and process-local wrapper hooks, not a replacement
+`ddraw.dll`. See [its contract](../features/single-stage-world-presentation.md).
+
+Runtime configuration: `[world_zoom]` in `cosmonarchy_viewport.ini`
+
+Implementation: `src\world_zoom.cpp`
+
+Owns only the opt-in battlefield crop/scale and its inverse gameplay-input
+transform. It does not own internal resolution, presentation size, HUD/menu
+geometry, or top-text layout. At 100 percent it takes the original no-op path.
+
 ## cnc-ddraw / windowing layer
 
 Files include `Starcraft\ddraw.dll` and `ddraw.ini`.

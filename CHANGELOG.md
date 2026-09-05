@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0, zoom and UI sizing
+
+- Added optional mouse-wheel zoom with smooth or instant transitions and extra zoom-in range.
+- Added independent HUD and top-text sizing.
+- Added smooth pixel-edge filtering and optional high-refresh cursor and selection-box movement.
+- Improved high-resolution panning and the settings window layout.
+
 ## 0.4.7, cnc-ddraw compatibility hotfix
 
 - Added compatibility for cnc-ddraw 7.0 and 7.1, including correct minimap dragging.

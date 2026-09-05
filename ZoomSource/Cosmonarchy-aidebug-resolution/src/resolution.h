@@ -1,6 +1,8 @@
 #ifndef RESOLUTION_H
 #define RESOLUTION_H
 
+#include <algorithm>
+
 #include "types.h"
 #include "../../zoom_resolution.h"
 
@@ -21,7 +23,11 @@ namespace resolution
     constexpr yuint native_safe_game_height =
         native_hud_top / camera_quantum * camera_quantum;
     constexpr yuint hud_height = native_height - native_hud_top;
-    constexpr xuint safe_pass_width = native_width;
+    // Keep at least eight pixels unused on either side of an interior crop.
+    // Exact-x native passes can leave their final four columns stale. World
+    // joins must come from fresh overlapping passes, never frame history.
+    constexpr unsigned horizontal_pass_guard = camera_quantum;
+    constexpr xuint safe_pass_width = native_width - 2 * horizontal_pass_guard;
     constexpr yuint safe_pass_height = 256;
     inline bool top_ui_uses_screen_edges =
         zoom_resolution_config::top_ui_layout ==
@@ -119,7 +125,7 @@ namespace resolution
         tile_height = yuint((unaligned_tile_height + camera_quantum - 1) /
             camera_quantum * camera_quantum);
 
-        return tile_width <= native_width &&
+        return tile_width <= safe_pass_width &&
             tile_height <= native_safe_game_height &&
             tile_rows * static_cast<unsigned>(tile_height) >=
                 static_cast<unsigned>(screen_height) &&
@@ -130,6 +136,32 @@ namespace resolution
             menu_width > xuint(0u) && menu_height > yuint(0u) &&
             menu_left + menu_width <= screen_width &&
             menu_top + menu_height <= screen_height;
+    }
+
+    struct WorldPassX
+    {
+        unsigned destination;
+        unsigned width;
+        unsigned camera;
+        unsigned source;
+    };
+
+    inline WorldPassX PlanWorldPassX(unsigned column, unsigned base_x,
+                                   unsigned map_width)
+    {
+        const unsigned destination = column * static_cast<unsigned>(tile_width);
+        const unsigned remaining = static_cast<unsigned>(game_width) - destination;
+        const unsigned width = std::min(static_cast<unsigned>(tile_width), remaining);
+        const unsigned desired = base_x + destination;
+        const unsigned leading = column ?
+            (static_cast<unsigned>(native_width) - static_cast<unsigned>(tile_width)) / 2 : 0;
+        const unsigned requested = desired > leading ? desired - leading : 0;
+        const unsigned maximum = map_width > static_cast<unsigned>(native_width) ?
+            map_width - static_cast<unsigned>(native_width) : 0;
+        const unsigned camera = std::min(requested, maximum);
+        const unsigned source = std::min(desired - camera,
+            static_cast<unsigned>(native_width) - width);
+        return { destination, width, camera, source };
     }
 
     static_assert(maximum_screen_width <= 0x7fff &&

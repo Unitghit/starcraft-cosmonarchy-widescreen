@@ -10,6 +10,10 @@
 #include "scconsole.h"
 #include "unit_type.h"
 #include "runtime_diagnostics.h"
+#include "world_zoom.h"
+#include "single_stage.h"
+#include "single_stage_frame.h"
+#include "ui_scale.h"
 #include <vector>
 #include "yms.h"
 
@@ -67,10 +71,91 @@ namespace
     uint8_t native_game_text_frame[native_frame_size];
     uint8_t native_stock_frame[native_frame_size];
     uint8_t native_inner_frame[native_frame_size];
-    std::vector<uint8_t> previous_world_frame;
-    uint32_t previous_world_camera_x;
-    uint32_t previous_world_camera_y;
-    bool previous_world_frame_valid;
+    uint8_t native_ui_probe_zero[native_frame_size];
+    uint8_t native_ui_probe_full[native_frame_size];
+
+    void PutUiPixel(uint8_t *destination, const ui_scale::Geometry &geometry,
+                    int x, int y, uint8_t color, unsigned layer = 1)
+    {
+        const bool native = single_stage::NativeUiPixel(layer, geometry, x, y, color);
+        const int left = geometry.x_edges[x], right = geometry.x_edges[x + 1];
+        const int top = geometry.y_edges[y], bottom = geometry.y_edges[y + 1];
+        if (right <= left || bottom <= top) return;
+        if (!native) single_stage::Opaque(left, top, right - left, bottom - top);
+        for (int row = top; row < bottom; ++row)
+            memset(destination + static_cast<size_t>(row) * resolution::screen_width + left,
+                   color, right - left);
+    }
+
+    // Prepared UI callbacks keep their native pitch. Determine coverage with
+    // two backgrounds, not by palette color (black is valid tooltip ink).
+    // Seed the normal pass from its actual presented location for blending.
+    template<class Draw>
+    void DrawScaledUiRaster(uint8_t *destination, const ui_scale::Geometry &geometry,
+                            unsigned layer, int left, int top, int width, int height, Draw draw)
+    {
+        static uint8_t pixels[native_frame_size], zero[native_frame_size], full[native_frame_size];
+        left = std::max(0, left); top = std::max(0, top);
+        const int right = std::min(640, left + width), bottom = std::min(480, top + height);
+        for (int y = top; y < bottom; ++y)
+            for (int x = left; x < right; ++x)
+            {
+                const int px = std::min(static_cast<int>(resolution::screen_width) - 1,
+                    (geometry.x_edges[x] + geometry.x_edges[x + 1]) / 2);
+                const int py = std::min(static_cast<int>(resolution::screen_height) - 1,
+                    (geometry.y_edges[y] + geometry.y_edges[y + 1]) / 2);
+                pixels[y * 640 + x] = destination[static_cast<size_t>(py) * resolution::screen_width + px];
+            }
+        Surface canvas = { static_cast<x16u>(640), static_cast<y16u>(480), pixels };
+        Surface *saved_canvas = *bw::current_canvas;
+        *bw::current_canvas = &canvas;
+        draw();
+        memset(zero, 0, sizeof(zero)); memset(full, 255, sizeof(full));
+        canvas.image = zero; draw();
+        canvas.image = full; draw();
+        *bw::current_canvas = saved_canvas;
+        for (int y = top; y < bottom; ++y)
+            for (int x = left; x < right; ++x)
+            {
+                const int index = y * 640 + x;
+                if (zero[index] == full[index] || zero[index] != 0 || full[index] != 255)
+                    PutUiPixel(destination, geometry, x, y, pixels[index], layer);
+            }
+    }
+
+    // Prepared opaque-or-skip raster callbacks are probed on two constant
+    // backgrounds, then drawn normally. This preserves black/equal-color ink.
+    // Background-dependent effects reject this frame to the existing path.
+    template<class Draw>
+    void ProbeUiRaster(Surface &canvas, int left, int top, int width, int height,
+                       int output_x, int output_y, Draw draw)
+    {
+        if (!single_stage::Capturing()) return;
+        static std::vector<uint8_t> zero, full;
+        const unsigned pitch = canvas.w, rows = canvas.h;
+        zero.resize(static_cast<size_t>(pitch) * rows);
+        full.resize(static_cast<size_t>(pitch) * rows);
+        const int right = std::min<int>(pitch, left + width);
+        const int bottom = std::min<int>(rows, top + height);
+        left = std::max(left, 0); top = std::max(top, 0);
+        if (left >= right || top >= bottom) return;
+        for (int y = top; y < bottom; ++y)
+        {
+            memset(zero.data() + static_cast<size_t>(y) * pitch + left, 0, right - left);
+            memset(full.data() + static_cast<size_t>(y) * pitch + left, 255, right - left);
+        }
+        uint8_t *saved = canvas.image;
+        canvas.image = zero.data(); draw();
+        canvas.image = full.data(); draw();
+        canvas.image = saved;
+        for (int y = top; y < bottom; ++y)
+            for (int x = left; x < right; ++x)
+            {
+                const size_t i = static_cast<size_t>(y) * pitch + x;
+                if (zero[i] == full[i]) single_stage::Opaque(x + output_x, y + output_y);
+                else if (zero[i] != 0 || full[i] != 255) single_stage::Reject();
+            }
+    }
     bool replay_tunit_load_attempted;
     bool replay_tunit_loaded;
     uint8_t replay_tunit_colors[256 * 8];
@@ -377,6 +462,7 @@ namespace
         DrawLayer &cursor = bw::draw_layers[0];
         const int mouse_x = static_cast<int>(*bw::mouse_clickpos_x);
         const int mouse_y = static_cast<int>(*bw::mouse_clickpos_y);
+#if RUNTIME_DIAGNOSTICS_ENABLED
         const uint32_t cursor_type = *bw::cursor_type;
         void *cursor_grp = *bw::current_cursor;
         const bool inside_native_game = mouse_x >= 0 && mouse_y >= 0 &&
@@ -428,6 +514,7 @@ namespace
             last_presented_hud_owner = static_cast<int>(
                 presented_hud_owns_cursor);
         }
+#endif
         // The native framebuffer retains an already-rasterized cursor when
         // StarCraft temporarily clears the layer redraw flag. Our expanded
         // frame is composed from scratch, so keep using the prepared layer
@@ -481,6 +568,35 @@ namespace
                 draw_cursor_offset_y = 0;
             }
         }
+        if (single_stage::PointerCapturing())
+        {
+            constexpr unsigned size=single_stage::CursorSize;
+            static uint8_t zero[size*size],full[size*size];
+            const auto grp=static_cast<const uint8_t *>(*bw::current_cursor);
+            uint16_t count=0;if(grp)memcpy(&count,grp,2);
+            if(count && *bw::cursor_layer_width<=size && *bw::cursor_layer_height<=size)
+            {
+                memset(zero,0,sizeof(zero));memset(full,255,sizeof(full));
+                Surface scratch={size,size,zero};
+                DrawParam cursor_param=param;
+                cursor_param.area=Rect16(0,0,size-1,size-1);
+                cursor_param.w=size;cursor_param.h=size;
+                *bw::current_canvas=&scratch;
+                (*cursor.Draw)(*bw::cursor_layer_left,*bw::cursor_layer_top,cursor.func_param,&cursor_param);
+                scratch.image=full;
+                (*cursor.Draw)(*bw::cursor_layer_left,*bw::cursor_layer_top,cursor.func_param,&cursor_param);
+                *bw::current_canvas=&expanded_canvas;
+                const auto frame=grp+6+(*bw::cursor_animation_frame%count)*8;
+                single_stage::PointerCursor(zero,full,*bw::cursor_layer_width,*bw::cursor_layer_height,
+                    int(frame[0])-63,int(frame[1])-63);
+            }
+            else single_stage::Reject(); // Preserve ordinary pointer for an unknown oversized frame.
+        }
+        else ProbeUiRaster(expanded_canvas,
+            static_cast<int>(cursor.area.left) + draw_cursor_offset_x,
+            static_cast<int>(cursor.area.top) + draw_cursor_offset_y,
+            *bw::cursor_layer_width, *bw::cursor_layer_height, 0, 0, [&]()
+            { (*cursor.Draw)(-draw_cursor_offset_x, -draw_cursor_offset_y, cursor.func_param, &param); });
         (*cursor.Draw)(-draw_cursor_offset_x,
                        -draw_cursor_offset_y,
                        cursor.func_param, &param);
@@ -568,6 +684,19 @@ namespace
             context.func_param = &cached_surface;
             *bw::context_help_visible = 1;
         }
+        if (!*bw::popup_dialog_active && (ui_scale::hud.Scaled() || single_stage::NativeUiCapturing()))
+        {
+            param.area = Rect16(0, 0, 639, 479);
+            param.w = static_cast<x16u>(640);
+            param.h = static_cast<y16u>(480);
+            DrawScaledUiRaster(destination, ui_scale::hud, 3, context.area.left,
+                context.area.top, context.area.right, context.area.bottom,
+                [&]() { (*context.Draw)(0, 0, context.func_param, &param); });
+            context.area = saved_area;
+            context.func_param = saved_param;
+            *bw::context_help_visible = saved_visible;
+            return;
+        }
         const int16_t saved_left = context.area.left;
         const int16_t saved_top = context.area.top;
         const int horizontal_offset = *bw::popup_dialog_active ?
@@ -584,6 +713,9 @@ namespace
 
         Surface *saved_canvas = *bw::current_canvas;
         *bw::current_canvas = &expanded_canvas;
+        ProbeUiRaster(expanded_canvas, context.area.left, context.area.top,
+            context.area.right, context.area.bottom, 0, 0, [&]()
+            { (*context.Draw)(0, 0, context.func_param, &param); });
         (*context.Draw)(0, 0, context.func_param, &param);
         *bw::current_canvas = saved_canvas;
         context.area = saved_area;
@@ -605,6 +737,17 @@ namespace
         int top = static_cast<int>(box.top);
         int right = static_cast<int>(box.right);
         int bottom = static_cast<int>(box.bottom);
+        if (world_zoom::Active())
+        {
+            const world_zoom::Point first =
+                world_zoom::SourceToPresented(left, top);
+            const world_zoom::Point second =
+                world_zoom::SourceToPresented(right, bottom);
+            left = first.x;
+            top = first.y;
+            right = second.x;
+            bottom = second.y;
+        }
         if (left > right)
             std::swap(left, right);
         if (top > bottom)
@@ -620,6 +763,18 @@ namespace
             static_cast<int>(resolution::screen_height) - 1));
 
         const uint8_t color = *bw::selection_box_color;
+        if(single_stage::PointerCapturing())
+        {
+            auto anchor=world_zoom::SourceToPresented(*bw::selection_anchor_x,*bw::selection_anchor_y);
+            single_stage::PointerSelection(anchor.x,anchor.y,color);
+        }
+        else
+        {
+            single_stage::Opaque(left, top, right - left + 1);
+            single_stage::Opaque(left, bottom, right - left + 1);
+            single_stage::Opaque(left, top, 1, bottom - top + 1);
+            single_stage::Opaque(right, top, 1, bottom - top + 1);
+        }
         uint8_t *top_row = destination +
             static_cast<size_t>(top) * resolution::screen_width;
         uint8_t *bottom_row = destination +
@@ -643,6 +798,12 @@ namespace
 
     void DrawExpandedGameText(uint8_t *destination)
     {
+        if (ui_scale::objectives.Scaled() || single_stage::NativeUiCapturing())
+        {
+            DrawScaledUiRaster(destination, ui_scale::objectives, 2, 0, 0, 640, 480,
+                []() { reinterpret_cast<void (__cdecl *)()>(0x0048CF60)(); });
+            return;
+        }
         // StarCraft uses Surface::w as both row pitch and UI layout width.
         // Pointing it at the 1280-wide final frame therefore gives the right
         // pitch but the wrong anchors: native top-left objectives and
@@ -669,6 +830,9 @@ namespace
         };
         Surface *saved_canvas = *bw::current_canvas;
         *bw::current_canvas = &text_canvas;
+        ProbeUiRaster(text_canvas, 0, 0, resolution::native_width,
+            resolution::native_height, resolution::top_ui_left, 0, []()
+            { reinterpret_cast<void (__cdecl *)()>(0x0048CF60)(); });
         reinterpret_cast<void (__cdecl *)()>(0x0048CF60)();
         *bw::current_canvas = saved_canvas;
         for (unsigned y = 0; y < resolution::native_height; ++y)
@@ -854,11 +1018,23 @@ namespace
         }
     }
 
+    void __fastcall DrawZoomedPopupBackground(int, int, void *, DrawParam *)
+    {
+        // DrawScreen established the native canvas before invoking layer 5.
+        // Seed its actual backing surface, not a guessed palette/alpha blend.
+        Surface *canvas = *bw::current_canvas;
+        if (canvas && canvas->image &&
+            canvas->w == resolution::native_width &&
+            canvas->h == resolution::native_height)
+            memcpy(canvas->image, native_popup_reference, native_frame_size);
+    }
+
     void RunStockPopupPass(uint32_t camera_x, uint32_t camera_y,
                            uint32_t base_camera_x,
                            uint32_t base_camera_y,
                            uint8_t *destination,
-                           bool draw_map_graphics = true)
+                           bool draw_map_graphics = true,
+                           bool use_presented_background = false)
     {
         uint8_t saved_draw[8];
         uint8_t saved_flags[8];
@@ -871,14 +1047,15 @@ namespace
             // dialog against the same pixels that will appear at its relocated
             // expanded-screen position. Cursor and context help are composed
             // once later and must not be duplicated by this private pass.
-            const bool popup_layer =
-                i == 2 || i == 3 || i == 4 || i == 5;
+            const bool popup_layer = i == 2 || i == 5 ||
+                (!use_presented_background && (i == 3 || i == 4));
             bw::draw_layers[i].draw = popup_layer ? saved_draw[i] : 0;
         }
         bw::draw_layers[2].draw = 1;
         bw::draw_layers[5].draw = 1;
         auto saved_game_draw = bw::draw_layers[5].Draw;
-        bw::draw_layers[5].Draw =
+        bw::draw_layers[5].Draw = use_presented_background ?
+            &DrawZoomedPopupBackground :
             reinterpret_cast<decltype(bw::draw_layers[5].Draw)>(0x004BD580);
 
         const uint32_t saved_screen_y_max = *bw::screen_y_max;
@@ -918,7 +1095,10 @@ namespace
                 placement_delta_y);
         }
 
-        memset(native_inner_frame, 0, native_frame_size);
+        if (use_presented_background)
+            memcpy(native_inner_frame, native_popup_reference, native_frame_size);
+        else
+            memset(native_inner_frame, 0, native_frame_size);
         recursive_stock_draw = true;
         reinterpret_cast<void (__cdecl *)()>(0x0041E280)();
         recursive_stock_draw = false;
@@ -954,6 +1134,8 @@ namespace
 
     void LogLayerTable(const char *stage)
     {
+        if (!runtime_diagnostics::Enabled())
+            return;
         static bool logged_menu;
         static bool logged_game;
         bool &logged = strcmp(stage, "game") == 0 ? logged_game : logged_menu;
@@ -1022,6 +1204,8 @@ namespace
 
     void DumpFirstExpandedFrame()
     {
+        if (!runtime_diagnostics::Enabled())
+            return;
         static bool dumped;
         if (dumped)
             return;
@@ -1196,78 +1380,17 @@ namespace
         }
     }
 
-    void RepairMovingFullWidthPassEdges(uint32_t camera_x,
-                                        uint32_t camera_y,
-                                        bool middle_pan_active)
+
+    void CopyTerrainTileLowerStrip(const uint8_t *source, unsigned source_x,
+                                   unsigned source_y,
+                                   unsigned destination_x,
+                                   unsigned destination_y,
+                                   unsigned copy_width,
+                                   unsigned visual_copy_height,
+                                   uint32_t base_camera_y,
+                                   uint32_t map_height)
     {
-        const size_t frame_size = expanded_frame_size();
-        if (previous_world_frame.size() != frame_size)
-        {
-            previous_world_frame.resize(frame_size);
-            previous_world_frame_valid = false;
-        }
-
-        if (middle_pan_active && previous_world_frame_valid &&
-            resolution::tile_width == resolution::native_width &&
-            resolution::tile_columns > 1)
-        {
-            const int64_t delta_x = static_cast<int64_t>(camera_x) -
-                previous_world_camera_x;
-            const int64_t delta_y = static_cast<int64_t>(camera_y) -
-                previous_world_camera_y;
-            constexpr unsigned stale_edge_width = 4;
-
-            for (unsigned column = 1;
-                 column < resolution::tile_columns; ++column)
-            {
-                const unsigned seam_x =
-                    column * resolution::tile_width;
-                if (seam_x < stale_edge_width ||
-                    seam_x > resolution::screen_width)
-                    continue;
-
-                for (unsigned y = 0; y < resolution::screen_height; ++y)
-                {
-                    const int64_t source_y =
-                        static_cast<int64_t>(y) + delta_y;
-                    if (source_y < 0 ||
-                        source_y >= resolution::screen_height)
-                        continue;
-
-                    for (unsigned x = seam_x - stale_edge_width;
-                         x < seam_x; ++x)
-                    {
-                        const int64_t source_x =
-                            static_cast<int64_t>(x) + delta_x;
-                        if (source_x < 0 ||
-                            source_x >= resolution::screen_width)
-                            continue;
-                        fake_screenbuf[
-                            static_cast<size_t>(y) *
-                                resolution::screen_width + x] =
-                            previous_world_frame[
-                                static_cast<size_t>(source_y) *
-                                    resolution::screen_width +
-                                static_cast<size_t>(source_x)];
-                    }
-                }
-            }
-        }
-
-        memcpy(previous_world_frame.data(), fake_screenbuf, frame_size);
-        previous_world_camera_x = camera_x;
-        previous_world_camera_y = camera_y;
-        previous_world_frame_valid = true;
-    }
-
-    void CopyTerrainTileGutters(const uint8_t *source, unsigned source_x,
-                                unsigned source_y, unsigned destination_x,
-                                unsigned destination_y, unsigned copy_width,
-                                unsigned visual_copy_height,
-                                uint32_t base_camera_y,
-                                uint32_t map_height)
-    {
-        if (resolution::hud_left == 0 || visual_copy_height == 0)
+        if (visual_copy_height == 0)
             return;
 
         const unsigned tile_bottom = std::min(
@@ -1293,6 +1416,20 @@ namespace
             static_cast<unsigned>(resolution::native_safe_game_height) -
                 source_gutter_y);
         if (copy_height == 0)
+            return;
+
+        // Zoom can move rows which normally sit behind the native console
+        // into exposed battlefield pixels. Build a complete pre-HUD world
+        // strip while zoom is active, then let the normal UI compositor place
+        // the HUD over it afterward.
+        if (world_zoom::Active() || ui_scale::hud.Scaled())
+        {
+            CopyTerrainTile(source, source_x, source_gutter_y,
+                destination_x, gutter_top, copy_width, copy_height);
+            return;
+        }
+
+        if (resolution::hud_left == 0)
             return;
 
         const unsigned tile_right = destination_x + copy_width;
@@ -1322,8 +1459,6 @@ namespace
                                uint32_t map_height)
     {
         memset(fake_screenbuf, 0, expanded_frame_size());
-        const uint32_t native_max_x = map_width > resolution::native_width ?
-            map_width - resolution::native_width : 0;
         const uint32_t native_max_y =
             map_height > resolution::native_safe_game_height ?
             map_height - resolution::native_safe_game_height : 0;
@@ -1335,22 +1470,17 @@ namespace
             for (unsigned column = 0; column < resolution::tile_columns;
                  ++column)
             {
-                const unsigned copy_width = TileCopyWidth(column);
-                const uint32_t desired_x =
-                    base_x + column * resolution::tile_width;
+                const auto horizontal = resolution::PlanWorldPassX(column, base_x, map_width);
+                const unsigned copy_width = horizontal.width;
                 const uint32_t desired_y =
                     base_y + row * resolution::tile_height;
                 // Preserve exact x inside RenderGameAt. Model MoveScreen's
                 // remaining y adjustment before deriving the source crop so
                 // adjacent passes cannot repeat a vertical band.
-                const uint32_t actual_x =
-                    std::min(desired_x, native_max_x);
+                const uint32_t actual_x = horizontal.camera;
                 const uint32_t actual_y = AlignCameraDown(
                     std::min(desired_y, native_max_y));
-                const unsigned source_x = std::min(
-                    static_cast<unsigned>(desired_x - actual_x),
-                    static_cast<unsigned>(resolution::native_width -
-                        copy_width));
+                const unsigned source_x = horizontal.source;
                 const unsigned source_y = std::min(
                     static_cast<unsigned>(desired_y - actual_y),
                     static_cast<unsigned>(resolution::native_safe_game_height -
@@ -1363,7 +1493,7 @@ namespace
                     column * resolution::tile_width,
                     row * resolution::tile_height,
                     copy_width, copy_height);
-                CopyTerrainTileGutters(
+                CopyTerrainTileLowerStrip(
                     target, source_x, source_y,
                     column * resolution::tile_width,
                     row * resolution::tile_height,
@@ -1522,15 +1652,45 @@ void BeginStockDrawScreen()
     EnsureGptpCursorHoverBounds();
     EnsureGptpSelectionBounds();
     EnsureGptpCursorWarpGuard();
-    EnsureGptpMinimapViewportBox();
     EnsureGptpUpgradeResearchClear();
     EnsureGptpInitialCameraCenter();
     EnsureGptpControlGroupCameraCenter();
     EnsurePresentationCursorGuards();
     RepairReplayPlayerColorRamps();
     ++stock_draw_depth;
+    static bool zoom_match_started = false;
+    if (stock_draw_depth == 1 && !recursive_stock_draw)
+    {
+        if (is_in_game() && !zoom_match_started)
+            world_zoom::BeginMatch();
+        zoom_match_started = is_in_game();
+    }
     if (stock_draw_depth == 1 && !recursive_stock_draw && is_in_game())
     {
+        const uint32_t map_width =
+            static_cast<uint32_t>(*bw::map_width_tiles) * 32;
+        const uint32_t map_height =
+            static_cast<uint32_t>(*bw::map_height_tiles) * 32;
+        world_zoom::UpdateTransform(*bw::screen_x, *bw::screen_y,
+                                    map_width, map_height);
+        uint32_t anchored_camera_x = *bw::screen_x;
+        uint32_t anchored_camera_y = *bw::screen_y;
+        if (world_zoom::ResolveCameraAnchor(
+                *bw::screen_x, *bw::screen_y, map_width, map_height,
+                &anchored_camera_x, &anchored_camera_y))
+        {
+            bw::MoveScreen(static_cast<int>(anchored_camera_x),
+                           static_cast<int>(anchored_camera_y));
+            // MoveScreen rounds to the engine's camera quantum. Preserve the
+            // smooth anchor correction while retaining its bookkeeping.
+            *bw::screen_x = anchored_camera_x;
+            *bw::screen_y = anchored_camera_y;
+            world_zoom::UpdateTransform(anchored_camera_x,
+                                        anchored_camera_y,
+                                        map_width, map_height, false);
+        }
+        SynchronizeWorldZoomPointer();
+        EnsureGptpMinimapViewportBox();
         // Draw the cursor once, after the expanded composition. Leaving it in
         // the native base pass clips it at x=639 and makes its dirty/background
         // restoration operate on the wrong pitch.
@@ -1567,7 +1727,7 @@ void AfterStockDrawScreen()
         selection_layer_suppressed = false;
     }
 
-    static bool trace_first_call = true;
+    static bool trace_first_call = runtime_diagnostics::Enabled();
     if (trace_first_call)
     {
         TracePostRenderer("enter");
@@ -1583,6 +1743,9 @@ void AfterStockDrawScreen()
     uint32_t camera_y = *bw::screen_y;
     const uint32_t stock_camera_x = camera_x;
     const uint32_t stock_camera_y = camera_y;
+    single_stage::Begin(in_game && (world_zoom::Active() || ui_scale::hud.Scaled() ||
+        ui_scale::objectives.Scaled() || single_stage::Filtering() || single_stage::HighRefreshPointer()),
+        resolution::screen_width, resolution::screen_height);
 
     if (in_game)
     {
@@ -1599,13 +1762,9 @@ void AfterStockDrawScreen()
             map_height - resolution::game_height : 0;
         camera_x = std::min(camera_x, expanded_max_x);
         camera_y = std::min(camera_y, expanded_max_y);
-        const uint32_t native_max_x = map_width > resolution::native_width ?
-            map_width - resolution::native_width : 0;
         const uint32_t native_max_y =
             map_height > resolution::native_safe_game_height ?
             map_height - resolution::native_safe_game_height : 0;
-        const unsigned horizontal_overlap =
-            resolution::native_width - resolution::tile_width;
         const unsigned vertical_overlap =
             resolution::native_safe_game_height - resolution::tile_height;
         for (unsigned row = 0; row < resolution::tile_rows; ++row)
@@ -1615,31 +1774,23 @@ void AfterStockDrawScreen()
             for (unsigned column = 0; column < resolution::tile_columns;
                  ++column)
             {
-                const unsigned copy_width = TileCopyWidth(column);
-                const uint32_t desired_x =
-                    camera_x + column * resolution::tile_width;
+                const auto horizontal = resolution::PlanWorldPassX(column, camera_x, map_width);
+                const unsigned copy_width = horizontal.width;
                 const uint32_t desired_y =
                     camera_y + row * resolution::tile_height;
                 // Later tiles are rendered with the unused part of the native
                 // canvas as a leading overlap. This keeps sprites that cross a
                 // crop boundary alive on both sides of the seam.
-                const uint32_t overlap_x = column ? horizontal_overlap / 2 : 0;
                 const uint32_t overlap_y = row ? vertical_overlap / 2 : 0;
-                const uint32_t render_x = desired_x > overlap_x ?
-                    desired_x - overlap_x : 0;
                 const uint32_t render_y = desired_y > overlap_y ?
                     desired_y - overlap_y : 0;
                 // Private passes preserve exact x after MoveScreen. Keep y at
                 // its effective eight-pixel position and derive both overlap
                 // crops from the camera actually used by each axis.
-                const uint32_t actual_x =
-                    std::min(render_x, native_max_x);
+                const uint32_t actual_x = horizontal.camera;
                 const uint32_t actual_y = AlignCameraDown(
                     std::min(render_y, native_max_y));
-                const unsigned source_x = std::min(
-                    static_cast<unsigned>(desired_x - actual_x),
-                    static_cast<unsigned>(resolution::native_width -
-                        copy_width));
+                const unsigned source_x = horizontal.source;
                 const unsigned source_y = std::min(
                     static_cast<unsigned>(desired_y - actual_y),
                     static_cast<unsigned>(resolution::native_safe_game_height -
@@ -1654,7 +1805,7 @@ void AfterStockDrawScreen()
                                 column * resolution::tile_width,
                                 row * resolution::tile_height,
                                 copy_width, copy_height);
-                CopyTerrainTileGutters(
+                CopyTerrainTileLowerStrip(
                     rendered_frame, source_x, source_y,
                     column * resolution::tile_width,
                     row * resolution::tile_height,
@@ -1680,8 +1831,10 @@ void AfterStockDrawScreen()
         // agree that the gesture has ended.
         const bool middle_pan_active =
             middle_button_down || engine_middle_pan_active;
-        RepairMovingFullWidthPassEdges(camera_x, camera_y,
-                                       middle_pan_active);
+        single_stage::World(fake_screenbuf, resolution::screen_width,
+            world_zoom::SourceLeft(), world_zoom::SourceTop(),
+            world_zoom::VisibleWidth(), world_zoom::SourceScreenHeight());
+        world_zoom::ScaleBattlefield(fake_screenbuf, fake_screenbuf_2);
         // MoveScreen rounds private render passes down to the engine's
         // eight-pixel camera quantum. The outer stock frame retains the exact
         // sub-quantum camera used by Cosmonarchy's smooth middle panner. A
@@ -1708,6 +1861,25 @@ void AfterStockDrawScreen()
 
         const bool popup_active = *bw::popup_dialog_active != 0;
         const PopupBounds popup = GetPopupBounds(popup_active);
+        // UI-only probes retain the native canvas and redraw ownership. The
+        // normal UI frame is already captured. Do not infer alpha by comparing
+        // UI colors with the real terrain image.
+        if (single_stage::Capturing())
+        {
+            memset(native_popup_reference, 0, native_frame_size);
+            RunStockPopupPass(camera_x, camera_y, camera_x, camera_y,
+                native_ui_probe_zero, false, true);
+            memset(native_popup_reference, 255, native_frame_size);
+            RunStockPopupPass(camera_x, camera_y, camera_x, camera_y,
+                native_ui_probe_full, false, true);
+            for (size_t i = 0; i < native_frame_size; ++i)
+                if (!popup.Contains(static_cast<unsigned>(i % resolution::native_width),
+                                    static_cast<unsigned>(i / resolution::native_width)) &&
+                    single_stage::NativeUiNeedsFallback(
+                    static_cast<unsigned>(i / resolution::native_width),
+                    native_ui_probe_zero[i], native_ui_probe_full[i]))
+                { single_stage::Reject(); break; }
+        }
         static bool last_popup_active;
         static void *last_popup_dialog;
         if (popup_active != last_popup_active ||
@@ -1766,7 +1938,7 @@ void AfterStockDrawScreen()
                 const uint8_t *native_game_row = native_game_reference +
                     static_cast<size_t>(source_y) *
                         resolution::native_width;
-                if (source_y < resolution::native_hud_protrusion_top &&
+                if (!single_stage::Capturing() && source_y < resolution::native_hud_protrusion_top &&
                     memcmp(native_ui_row, native_game_row,
                            resolution::native_width) == 0)
                 {
@@ -1783,6 +1955,8 @@ void AfterStockDrawScreen()
                     const bool differs_from_world =
                         native_ui_frame[native_index] !=
                         native_game_reference[native_index];
+                    const bool owned_ui = single_stage::Capturing() &&
+                        native_ui_probe_zero[native_index] == native_ui_probe_full[native_index];
 
                     if (IsRelocatedNativeHudProtrusion(
                             source_x, source_y, console_race))
@@ -1795,30 +1969,19 @@ void AfterStockDrawScreen()
                         if (IsDiscardedNativeHudOrnament(
                             source_x, source_y, console_race))
                             continue;
-                        if (differs_from_world ||
+                        if (differs_from_world || owned_ui ||
                             NativeUiPixelIsOpaque(source_x, source_y))
                         {
-                            fake_screenbuf[
-                                static_cast<size_t>(hud_vertical_offset +
-                                    source_y) * resolution::screen_width +
-                                resolution::hud_left + source_x] =
-                                    native_ui_frame[native_index];
+                            PutUiPixel(fake_screenbuf, ui_scale::hud,
+                                source_x, source_y, native_ui_frame[native_index]);
                         }
                         continue;
                     }
 
-                    if (differs_from_world)
+                    if (differs_from_world || owned_ui)
                     {
-                        // Layer 2 owns top-screen resource counters rather
-                        // than DrawExpandedGameText. Move those native UI
-                        // pixels into the same horizontally centered 640-wide
-                        // box as objectives instead of leaving them at the
-                        // obsolete x=0 native-frame origin.
-                        fake_screenbuf[static_cast<size_t>(source_y) *
-                            resolution::screen_width +
-                            resolution::top_ui_right_native_origin +
-                            source_x] =
-                            native_ui_frame[native_index];
+                        PutUiPixel(fake_screenbuf, ui_scale::resources,
+                            source_x, source_y, native_ui_frame[native_index], 0);
                     }
                 }
             }
@@ -1836,9 +1999,10 @@ void AfterStockDrawScreen()
                 static_cast<int>(source_y) < popup.bottom &&
                 popup.left < static_cast<int>(resolution::native_width) &&
                 popup.right > 0;
-            if (source_y >= resolution::native_game_height &&
+            if (!ui_scale::hud.Scaled() && !single_stage::NativeUiCapturing() && source_y >= resolution::native_game_height &&
                 !popup_intersects_row)
             {
+                single_stage::Opaque(resolution::hud_left, destination_y, resolution::native_width);
                 memcpy(fake_screenbuf +
                            static_cast<size_t>(destination_y) *
                                resolution::screen_width +
@@ -1864,11 +2028,8 @@ void AfterStockDrawScreen()
                     differs_from_world ||
                     NativeUiPixelIsOpaque(source_x, source_y))
                 {
-                    fake_screenbuf[
-                        static_cast<size_t>(destination_y) *
-                            resolution::screen_width +
-                        resolution::hud_left + source_x] =
-                        native_ui_frame[native_index];
+                    PutUiPixel(fake_screenbuf, ui_scale::hud,
+                        source_x, source_y, native_ui_frame[native_index]);
                 }
             }
         }
@@ -1885,12 +2046,25 @@ void AfterStockDrawScreen()
                 resolution::native_ui_left;
             const uint32_t popup_camera_y = camera_y +
                 resolution::native_ui_top;
-            RunStockGameOnlyPass(popup_camera_x, popup_camera_y,
-                                 camera_x, camera_y,
-                                 native_popup_reference);
-            RunStockPopupPass(popup_camera_x, popup_camera_y,
-                              camera_x, camera_y,
-                              native_popup_frame);
+            if (world_zoom::Active())
+            {
+                for (unsigned y = 0; y < resolution::native_height; ++y)
+                    memcpy(native_popup_reference + y * resolution::native_width,
+                        fake_screenbuf + static_cast<size_t>(y +
+                            resolution::native_ui_top) * resolution::screen_width +
+                            resolution::native_ui_left, resolution::native_width);
+                RunStockPopupPass(camera_x, camera_y, camera_x, camera_y,
+                                  native_popup_frame, false, true);
+            }
+            else
+            {
+                RunStockGameOnlyPass(popup_camera_x, popup_camera_y,
+                                     camera_x, camera_y,
+                                     native_popup_reference);
+                RunStockPopupPass(popup_camera_x, popup_camera_y,
+                                  camera_x, camera_y,
+                                  native_popup_frame);
+            }
 
             static bool logged_popup_transparency_pass;
             if (!logged_popup_transparency_pass)
@@ -1922,18 +2096,20 @@ void AfterStockDrawScreen()
                         static_cast<size_t>(source_y) *
                             resolution::native_width +
                         static_cast<unsigned>(source_x);
-                    if (native_popup_frame[native_index] !=
-                        native_popup_reference[native_index])
-                    {
-                        fake_screenbuf[
-                            static_cast<size_t>(destination_y) *
-                                resolution::screen_width +
-                            resolution::native_ui_left +
-                            static_cast<unsigned>(source_x)] =
-                            native_popup_frame[native_index];
-                    }
+                    // Retain the complete preblended rectangle, including
+                    // pixels equal to its background. The logical popup is
+                    // above the independently sampled world and native HUD.
+                    fake_screenbuf[
+                        static_cast<size_t>(destination_y) *
+                            resolution::screen_width +
+                        resolution::native_ui_left +
+                        static_cast<unsigned>(source_x)] =
+                        native_popup_frame[native_index];
                 }
             }
+            single_stage::Opaque(resolution::native_ui_left + popup.left,
+                resolution::native_ui_top + popup.top,
+                popup.right - popup.left, popup.bottom - popup.top);
         }
         bw::MoveScreen(static_cast<int>(camera_x), static_cast<int>(camera_y));
         // Cosmonarchy's middle-button panner can retain sub-quantum camera
@@ -1954,7 +2130,6 @@ void AfterStockDrawScreen()
     }
     else
     {
-        previous_world_frame_valid = false;
         if (trace_first_call)
             TracePostRenderer("composing menu");
         LogLayerTable("menu");
@@ -1967,19 +2142,25 @@ void AfterStockDrawScreen()
     for (drawhook &hook : draw_hooks)
         (*hook.func)(fake_screenbuf_2, resolution::screen_width,
                      resolution::screen_height);
+    if (single_stage::Capturing() && memcmp(fake_screenbuf_2, fake_screenbuf, expanded_frame_size()) != 0)
+        single_stage::Reject(); // Third-party/debug draw hooks have no coverage contract.
     if (in_game)
     {
         DrawExpandedGameText(fake_screenbuf_2);
         DrawExpandedContextHelp(fake_screenbuf_2);
+        single_stage::PointerBackground(fake_screenbuf_2,resolution::screen_width,resolution::screen_height,
+            reinterpret_cast<uintptr_t>(*bw::main_window_hwnd),*bw::popup_dialog_active!=0);
         DrawExpandedSelectionBox(fake_screenbuf_2);
         DrawExpandedCursor(fake_screenbuf_2);
     }
     if (trace_first_call)
         TracePostRenderer("presenting expanded frame");
+    single_stage::Submit(fake_screenbuf_2);
     PresentExpandedFrame(&physical_pitch);
     if (trace_first_call)
         TracePostRenderer("present complete");
 
+#if RUNTIME_DIAGNOSTICS_ENABLED
     static uint32_t next_log_tick;
     const uint32_t now = GetTickCount();
     if (next_log_tick == 0 || static_cast<int32_t>(now - next_log_tick) >= 0)
@@ -2007,6 +2188,7 @@ void AfterStockDrawScreen()
         }
         next_log_tick = now + 5000;
     }
+#endif
     trace_first_call = false;
     if (stock_draw_depth != 0)
         --stock_draw_depth;
@@ -2163,6 +2345,7 @@ void DrawScreen()
         (*bw::SDrawUnlockSurface_Import)(0, surface, 0, 0);
     }
 
+#if RUNTIME_DIAGNOSTICS_ENABLED
     static uint32_t next_log_tick;
     const uint32_t now = GetTickCount();
     if (next_log_tick == 0 || static_cast<int32_t>(now - next_log_tick) >= 0)
@@ -2200,6 +2383,7 @@ void DrawScreen()
         }
         next_log_tick = now + 5000;
     }
+#endif
 }
 
 int SDrawLockSurface_Hook(int surface_id, Rect32 *a2, uint8_t **surface, int *width, int unused)

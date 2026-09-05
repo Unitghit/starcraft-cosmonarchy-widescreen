@@ -59,6 +59,11 @@
     <ClCompile Include="src\presentation.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\single_stage.cpp" />
+    <ClCompile Include="src\single_stage_portable.cpp" />
+    <ClCompile Include="src\world_zoom.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\mpqdraft.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -254,7 +259,13 @@
     <ClInclude Include="src\resolution.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\ui_scale.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="src\presentation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\world_zoom.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\rng.h">

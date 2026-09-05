@@ -1,5 +1,20 @@
 # Release checklist
 
+## v0.5.0 verification, 2026-09-04
+
+- Release renderer and configurator builds pass. Existing upstream C++/FreeType
+  warnings remain; the configurator publish has no warnings.
+- Geometry, zoom, selection bounds, HUD sizing, panning, GUI, OpenGL and D3D9
+  regressions pass. Both final bug fixes were confirmed by the user in-game.
+- Runtime diagnostics are compiled out. The ZIP allowlist excludes AI repair,
+  map reveal, test executables, captures and game files.
+- Versioned ZIP and standalone EXE hashes are recorded in `SHA256SUMS.txt`.
+- Historical interactive coverage is recorded in the system map. The generic
+  checklist below remains a reusable checklist, not a claim that every scenario
+  was rerun for this package. macOS remains untested.
+
+## Full regression checklist
+
 - [ ] Renderer Release/Win32 rebuild succeeds.
 - [ ] Configurator Release publish succeeds without warnings.
 - [ ] Offline geometry matrix passes every preset and representative custom

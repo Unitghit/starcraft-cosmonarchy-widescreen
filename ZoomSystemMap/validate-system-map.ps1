@@ -21,6 +21,7 @@ if (-not (Test-Path -LiteralPath $stableGptpBackup -PathType Leaf)) {
 }
 $geometryVerifier = Join-Path $workspace 'ZoomIntegration\verify_fixed_zoom.py'
 $menuScalerVerifier = Join-Path $workspace 'ZoomIntegration\verify_menu_scaler.py'
+$worldZoomVerifier = Join-Path $workspace 'ZoomIntegration\verify_world_zoom.py'
 $expectedGptpHash = 'CC6BF422B4DC6174EC6B002ACAE12A826D61CBF144661FE0C4F9E3687664BB99'
 
 $requiredDocuments = @(
@@ -34,8 +35,11 @@ $requiredDocuments = @(
     'features\building-placement.md',
     'features\cursor-hover.md',
     'features\legacy-hud-tooltips.md',
+    'features\hud-sizing.md',
     'features\positional-audio.md',
     'features\presentation-scaling.md',
+    'features\world-zoom.md',
+    'features\single-stage-world-presentation.md',
     'features\portable-configurator.md',
     'reverse-engineering\functions-and-globals.md',
     'reverse-engineering\draw-layers-and-structures.md',
@@ -91,6 +95,7 @@ $drawSource = Join-Path $rendererSource 'src\draw.cpp'
 $inputSource = Join-Path $rendererSource 'src\scconsole.cpp'
 $presentationSource = Join-Path $rendererSource 'src\presentation.cpp'
 $presentationHeader = Join-Path $rendererSource 'src\presentation.h'
+$worldZoomSource = Join-Path $rendererSource 'src\world_zoom.cpp'
 $resolutionHeader = Join-Path $rendererSource 'src\resolution.h'
 $mainPatchSource = Join-Path $rendererSource 'src\mainpatch.cpp'
 $configuratorSource = Join-Path $workspace 'ViewportConfigurator\ConfigurationService.cs'
@@ -148,11 +153,27 @@ $requiredSourcePatterns = @(
     @{ Path = $mainPatchSource; Pattern = 'resolution::Configure' }
     @{ Path = $mainPatchSource; Pattern = 'top_ui_layout' }
     @{ Path = $configuratorSource; Pattern = 'top_ui_layout=' }
+    @{ Path = $worldZoomSource; Pattern = 'ScaleBattlefield' }
+    @{ Path = $worldZoomSource; Pattern = 'PresentedToSource' }
+    @{ Path = $worldZoomSource; Pattern = '"world_zoom", "enabled"' }
+    @{ Path = $drawSource; Pattern = 'world_zoom::ScaleBattlefield' }
+    @{ Path = $inputSource; Pattern = 'world_zoom::PresentedToSource' }
+    @{ Path = $configuratorSource; Pattern = '[world_zoom]' }
 )
 foreach ($check in $requiredSourcePatterns) {
     if (-not (Select-String -LiteralPath $check.Path -SimpleMatch $check.Pattern -Quiet)) {
         throw "Mapped source anchor missing: $($check.Pattern) in $($check.Path)"
     }
+}
+
+& python $worldZoomVerifier
+if ($LASTEXITCODE -ne 0) {
+    throw 'Optional gameplay zoom verification failed'
+}
+
+& python (Join-Path $workspace 'ZoomIntegration\verify_minimap_viewport_patch.py') $stableGptp
+if ($LASTEXITCODE -ne 0) {
+    throw 'Minimap binary guard verification failed'
 }
 
 & python $geometryVerifier

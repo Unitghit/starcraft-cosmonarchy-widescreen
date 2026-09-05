@@ -4,6 +4,18 @@
 expanded Cosmonarchy renderer. Put the executable beside `Cosmonarchy BW.exe`,
 open it, choose settings, and select **Save** or **Save & Play**.
 
+Settings scroll when they do not fit the window. Restore Original, Save,
+Save & Play, the current-resolution summary, warnings, and the status message
+stay in a fixed bottom footer. The summary stays above the action buttons.
+The mouse wheel scrolls the page over dropdowns without changing their selected
+options. An open dropdown closes when wheel scrolling starts. Click or use the
+keyboard to choose options.
+
+Under Gameplay zoom, **Extra zoom-in range** offers Off, 50% more, or 100%
+more (Default) magnification beyond the existing zoom limit. Off retains normal
+zoom; disable Mouse-wheel zoom to turn zooming off entirely. The extra range
+does not change the starting view, internal resolution, or HUD size.
+
 The program deliberately keeps two settings independent:
 
 - **Internal viewport resolution** selects a 16:9 or 4:3 preset, or accepts a

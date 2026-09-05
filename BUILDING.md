@@ -23,11 +23,14 @@ This performs four steps:
 
 1. Builds one universal `aize_debug.qdp` payload with a default 1280x720
    fallback. Runtime config safely selects 640x480 through 3840x2160.
-2. Runs the offline preset/custom geometry matrix.
+2. Checks release cleanliness and runs geometry, zoom, HUD, panning,
+   configurator, and D3D9/OpenGL presentation tests. The presentation tests
+   require a working Windows graphics session and compatible drivers.
 3. Embeds the payload and compatibility manifest into a single-file WinForms
    configurator.
-4. Writes `Cosmonarchy Widescreen Settings.exe` and `SHA256SUMS.txt` beneath
-   `artifacts/release`.
+4. Writes `Cosmonarchy Widescreen Settings.exe`, the versioned ZIP bundle,
+   and `SHA256SUMS.txt` beneath `artifacts/release`. The ZIP contains only the
+   configurator, its checksum, installation instructions and license notices.
 
 The build has no dependency on an installed copy of StarCraft or Cosmonarchy.
 Runtime and full system-map integration validation do require a compatible local

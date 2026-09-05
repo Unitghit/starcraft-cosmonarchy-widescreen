@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $workspace = Split-Path -Parent $projectRoot
 $rendererRoot = Join-Path $workspace 'ZoomSource\Cosmonarchy-aidebug-resolution'
+& (Join-Path $workspace 'ZoomIntegration\build-single-stage-shader.ps1')
 $project = Join-Path $rendererRoot 'teippi.vcxproj'
 $vswhere = Join-Path ${env:ProgramFiles(x86)} `
     'Microsoft Visual Studio\Installer\vswhere.exe'

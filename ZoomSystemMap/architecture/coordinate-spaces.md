@@ -21,8 +21,10 @@ it is modified.
 
 ## Derived geometry
 
-The only intended user-selected values are `screen_width` and
-`screen_height` in `ZoomSource/zoom_resolution.h`.
+Internal dimensions come from `[viewport]` at startup. The formulas below
+describe the legacy/default HUD size. Optional `[ui_size]` settings use
+`src/ui_scale.h` instead for presented HUD and top-text geometry, without
+changing these native-resolution fields or gameplay camera dimensions.
 
 ```text
 game_width  = screen_width
@@ -55,8 +57,9 @@ tile coordinate, and world coordinate do not.
 ## Input conversion
 
 - Battlefield: physical coordinate is forwarded unchanged.
-- Presented HUD: subtract `(hud_left, hud_top - native_hud_top)` only when the
-  native STrans mask says the pixel belongs to solid HUD artwork.
+- Presented HUD: inverse-map with `ui_scale::hud.NativeX/NativeY`, then query
+  native control bounds and STrans ownership. At default size this is exactly
+  subtraction of `(hud_left, hud_top - native_hud_top)`.
 - Modal dialog: subtract `(native_ui_left, native_ui_top)` and clamp to the
   native frame.
 - Obsolete invisible native HUD: bypass its dialog hit test, then restore the

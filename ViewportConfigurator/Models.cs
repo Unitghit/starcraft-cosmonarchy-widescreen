@@ -18,6 +18,11 @@ internal sealed record ScaleChoice(decimal Value, string DisplayName)
     public override string ToString() => DisplayName;
 }
 
+internal sealed record WorldZoomChoice(bool Enabled, string DisplayName)
+{
+    public override string ToString() => DisplayName;
+}
+
 internal sealed record DisplayChoice(int Index, Screen Screen)
 {
     public string DeviceName => Screen.DeviceName;
@@ -66,7 +71,17 @@ internal sealed record ViewportSettings(
     ScalingFilter Filter,
     bool PreserveAspectRatio,
     DisplayChoice Display,
-    TopTextLayout TopTextLayout = TopTextLayout.Centered4x3);
+    TopTextLayout TopTextLayout = TopTextLayout.Centered4x3,
+    bool WorldZoomEnabled = false,
+    bool SmoothWorldZoom = true,
+    int StartingZoomUnits = 10000,
+    bool SingleStagePresentation = true,
+    int HudReferenceHeight = 0,
+    bool SeparateTopTextSize = false,
+    int TopTextReferenceHeight = 0,
+    bool SmoothWorldEdges = true,
+    bool HighRefreshPointer = false,
+    int ExtraZoomPercent = 100);
 
 internal sealed record ValidationResult(bool Success, string Message);
 

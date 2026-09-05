@@ -1,4 +1,4 @@
-StarCraft Cosmonarchy Widescreen 0.4.7
+StarCraft Cosmonarchy Widescreen 0.5.0
 ======================================
 
 INSTALL
@@ -6,14 +6,21 @@ INSTALL
 1. Install Cosmonarchy normally.
 2. Copy "Cosmonarchy Widescreen Settings.exe" beside "Cosmonarchy BW.exe".
 3. Open the settings program.
-4. Choose an internal resolution and external presentation size.
+4. Choose an internal resolution and window size.
 5. Select Save or Save & Play.
 
 RECOMMENDED SETTINGS
 
 Internal resolution: 1280 x 720
-Filter: Nearest neighbor
+Zoom rendering: Pixel-perfect
+World pixel edges: Smooth pixel edges
 Window mode: Windowed or borderless fullscreen
+
+OPTIONAL FEATURES
+
+Mouse-wheel zoom: smooth or instant, with a starting view and extra zoom range.
+HUD size: resize the bottom HUD and top text together or separately.
+High-refresh cursor and selection: smoother movement without faster animations.
 
 RESTORE
 

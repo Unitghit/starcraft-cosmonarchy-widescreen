@@ -4,6 +4,19 @@ All StarCraft patches below are installed from
 `Cosmonarchy-aidebug-resolution/src/limits.cpp` or `src/mainpatch.cpp`. Every
 operand is preflighted against its expected native value before replacement.
 
+## Zoomed minimap input conversion
+
+Stable GPTP RVA `0x2C638` is an E8 call to helper RVA `0x10890`, with pointers
+to native minimap x/y words in ECX/EDX. `EnsureGptpMinimapViewportBox` verifies
+that relative target alongside the existing input and outline operand guards.
+The call is redirected to `ZoomMinimapToWorld`, which delegates unchanged at
+100%/disabled zoom. Active zoom restores the pre-subtraction minimap point,
+calls the original converter, then solves a crop-aware base camera target.
+The native comparison, MoveScreen call, and dialog-refresh tail remain intact.
+The protection/flush range covers both draw-origin operands and this call;
+no GPTP file is changed on disk. `verify_minimap_viewport_patch.py` verifies
+the original call target and opcode against the actual stable binary.
+
 ## Physical output
 
 | Address | Native | Replacement |
@@ -218,6 +231,25 @@ configured values. A mixed value set or any signature mismatch is treated as
 incompatible and no write occurs. The patch runs once after GPTP loads and
 does not alter the module file on disk.
 
+Zoom-aware selection correction (2026-09-04): the same two branches also
+implement double-click and Shift+double-click. Stable binary disassembly
+confirms calls at RVAs `0xB545C` and `0xB554D` both target `0xD020`, an
+ECX-argument helper returning the unit list in EAX. Redirect only those two
+calls to `SearchVisibleSelection`. With zoom active it supplies a local Box16
+for camera plus `SourceLeft/SourceTop`, with `VisibleWidth/SourceScreenHeight`.
+The full source height includes gameplay beside the bottom HUD. Zoom disabled
+forwards the original rectangle unchanged. Sorting, temporary-list ownership,
+ordinary drag selection, HUD clicks, AI searches and existing Shift selections
+remain GPTP-owned. Never globally hook the shared unit search or modify camera
+globals to achieve selection clipping.
+
+Installation verifies both original call destinations and the helper's
+non-relocated ECX prologue before any writes. Calls and four dimensions share
+one protected write range and instruction-cache flush. All geometry is read
+at click time from the displayed transform, not the pending animation target;
+no per-frame instruction rewriting. Static binary and offline geometry tests
+pass; the user confirmed zoomed same-type selection on 2026-09-04.
+
 ### Gameplay hover cursor
 
 Selector sequence RVA: `0x000675B8`
@@ -253,6 +285,22 @@ values whenever the map's `u16` minimap zoom level at StarCraft `0x0059CC6C`
 changes. This is a runtime data update, not an on-disk GPTP modification.
 External presentation magnification is intentionally excluded; the outline
 represents the internal battlefield viewport.
+
+The outline drawing routine at GPTP RVA `0x2C310` originally reads pointer
+cells at RVAs `0x259E94` and `0x259E98`, which resolve to StarCraft's unzoomed
+camera y and x globals. Its two verified `A1` operands are redirected at
+runtime to aidebug-owned shadow pointer cells. The shadow values contain
+`camera + world_zoom_source_crop`, so the resized outline begins at the actual
+visible world origin instead of the old base-camera origin. This redirection
+applies only to drawing. The minimap click and drag routine at RVA `0x2C5F0`
+continues to use the real camera and mouse globals.
+
+The draw guard must match the actual `33 D2` encoding of `xor edx, edx` at
+RVA `0x2C376`. The equivalent `31 D2` encoding is absent in the stable binary;
+checking for it rejects the patch and also prevents camera-box size updates.
+`ZoomIntegration/verify_minimap_viewport_patch.py` checks the source guards and
+pointer dereferences against a supplied GPTP binary and rejects this previous
+incorrect encoding. The instruction cache flush covers the modified operands.
 
 ### Extended upgrade research clear stabilization
 

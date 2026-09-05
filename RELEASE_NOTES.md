@@ -1,4 +1,6 @@
-# StarCraft Cosmonarchy Widescreen 0.4.7
+# StarCraft Cosmonarchy Widescreen 0.5.0
 
-- Added compatibility for cnc-ddraw 7.0 and 7.1, including correct minimap dragging.
-- Fixed gameplay cursor graphics appearing over the HUD and minimap.
+- Added optional mouse-wheel zoom with smooth or instant transitions and extra zoom-in range.
+- Added independent HUD and top-text sizing.
+- Added smooth pixel-edge filtering and optional high-refresh cursor and selection-box movement.
+- Improved high-resolution panning and the settings window layout.

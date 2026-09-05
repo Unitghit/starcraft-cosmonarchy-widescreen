@@ -32,7 +32,7 @@ NATIVE_GAME_HEIGHT = config_value("native_game_height")
 NATIVE_HUD_TOP = 314
 CAMERA_QUANTUM = 8
 SAFE_GAME_HEIGHT = NATIVE_HUD_TOP // CAMERA_QUANTUM * CAMERA_QUANTUM
-MAX_PASS_WIDTH = NATIVE_WIDTH
+MAX_PASS_WIDTH = NATIVE_WIDTH - 2 * CAMERA_QUANTUM
 MAX_PASS_HEIGHT = 256
 OUTPUT_WIDTH = config_value("screen_width")
 OUTPUT_HEIGHT = config_value("screen_height")
@@ -79,12 +79,8 @@ def verify_camera(g: dict[str, int], map_width: int, map_height: int,
     safe_max_y = max(0, map_height - SAFE_GAME_HEIGHT)
     expanded_max_x = max(0, map_width - game_width)
     expanded_max_y = max(0, map_height - game_height)
-    base_x = align_down(
-        min(max(0, base_x), expanded_max_x), CAMERA_QUANTUM
-    )
-    base_y = align_down(
-        min(max(0, base_y), expanded_max_y), CAMERA_QUANTUM
-    )
+    base_x = min(max(0, base_x), expanded_max_x)
+    base_y = min(max(0, base_y), expanded_max_y)
 
     covered_area = 0
     covered_gutter_area = 0
@@ -107,18 +103,18 @@ def verify_camera(g: dict[str, int], map_width: int, map_height: int,
             overlap_y = vertical_overlap // 2 if row else 0
             render_x = max(0, desired_x - overlap_x)
             render_y = max(0, desired_y - overlap_y)
-            # StarCraft's MoveScreen floors both axes to CAMERA_QUANTUM.
-            # Source crops must be derived from that effective position.
-            actual_x = align_down(min(render_x, native_max_x), CAMERA_QUANTUM)
+            # World passes restore exact x after MoveScreen; y stays aligned.
+            actual_x = min(render_x, native_max_x)
             actual_y = align_down(min(render_y, safe_max_y), CAMERA_QUANTUM)
             source_x = min(desired_x - actual_x, NATIVE_WIDTH - copy_width)
             source_y = min(desired_y - actual_y,
                            SAFE_GAME_HEIGHT - copy_height)
-            assert actual_x % CAMERA_QUANTUM == 0
             assert actual_y % CAMERA_QUANTUM == 0
             assert actual_x + source_x == desired_x
             assert actual_y + source_y == desired_y
             assert source_x + copy_width <= NATIVE_WIDTH
+            if actual_x < native_max_x:
+                assert source_x + copy_width <= NATIVE_WIDTH - CAMERA_QUANTUM
             assert source_y + copy_height <= SAFE_GAME_HEIGHT
             assert destination_x + copy_width <= game_width
             assert destination_y + copy_height <= game_height
