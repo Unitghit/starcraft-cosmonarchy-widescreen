@@ -36,6 +36,20 @@ The build has no dependency on an installed copy of StarCraft or Cosmonarchy.
 Runtime and full system-map integration validation do require a compatible local
 installation and intentionally are not part of the public build script.
 
+## GitHub Actions graphics environment
+
+Hosted Windows runners may expose only the system OpenGL 1.1 implementation.
+The workflow runs `scripts/setup-ci-opengl.ps1` to download a pinned Mesa 26.2.0
+MSVC archive, verify its SHA-256, and extract two x86 DLLs beside the graphics
+test executable in `artifacts/single-stage-tests`. The build step selects
+Mesa's software `llvmpipe` renderer. No tests are disabled: OpenGL shader/pixel
+checks and the existing D3D9 tests must still pass.
+
+These DLLs are test dependencies only. They are never installed system-wide,
+embedded in the configurator, copied to the game, or included in the release
+ZIP. Local builds normally use the installed graphics driver. Running the CI
+setup script locally opts that test directory into Mesa too.
+
 ## Manual commands
 
 ```powershell

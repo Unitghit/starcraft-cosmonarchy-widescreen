@@ -20,8 +20,14 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Set up software OpenGL for graphics tests
+        shell: pwsh
+        run: .\scripts\setup-ci-opengl.ps1
+
       - name: Build and verify release
         shell: pwsh
+        env:
+          GALLIUM_DRIVER: llvmpipe
         run: .\scripts\build-release.ps1
 
       - name: Upload configurator artifact
@@ -31,5 +37,5 @@ jobs:
           path: |
             artifacts/release/Cosmonarchy Widescreen Settings.exe
             artifacts/release/SHA256SUMS.txt
-            artifacts/release/StarCraft-Cosmonarchy-Widescreen-v0.3.1.zip
+            artifacts/release/StarCraft-Cosmonarchy-Widescreen-v*.zip
           if-no-files-found: error
