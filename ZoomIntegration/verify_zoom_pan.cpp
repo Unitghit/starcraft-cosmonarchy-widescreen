@@ -1,5 +1,6 @@
 // Tests the production accumulator AND x86 call adapters in an isolated process.
 #define NOMINMAX
+#define ZOOM_PAN_OFFLINE_TEST
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -66,34 +67,39 @@ static void Accumulators()
 
 // Minimal native callees with the real register ABI and EAX result. They live
 // only in this test executable; never load or patch a running game.
+static int *test_camera_x, *test_camera_y;
 __declspec(naked) void NativeUp()
 {
-    __asm { sub dword ptr ds:[0x6284a8], eax }
+    __asm { mov ecx, test_camera_y }
+    __asm { sub dword ptr [ecx], eax }
     __asm { mov eax, 1 }
     __asm { ret }
 }
 __declspec(naked) void NativeDown()
 {
-    __asm { add dword ptr ds:[0x6284a8], edx }
+    __asm { mov ecx, test_camera_y }
+    __asm { add dword ptr [ecx], edx }
     __asm { mov eax, 1 }
     __asm { ret }
 }
 __declspec(naked) void NativeLeft()
 {
-    __asm { sub dword ptr ds:[0x62848c], eax }
+    __asm { mov ecx, test_camera_x }
+    __asm { sub dword ptr [ecx], eax }
     __asm { mov eax, 1 }
     __asm { ret }
 }
 __declspec(naked) void NativeRight()
 {
-    __asm { add dword ptr ds:[0x62848c], edx }
+    __asm { mov ecx, test_camera_x }
+    __asm { add dword ptr [ecx], edx }
     __asm { mov eax, 1 }
     __asm { ret }
 }
 static void __fastcall NativeMiddle(int dx, int dy)
 {
-    *reinterpret_cast<int *>(0x62848c) += dx;
-    *reinterpret_cast<int *>(0x6284a8) += dy;
+    *test_camera_x += dx;
+    *test_camera_y += dy;
 }
 static void Jump(uintptr_t at, uintptr_t target)
 {
@@ -126,18 +132,21 @@ static int Invoke(uintptr_t target, int amount)
 }
 static void Adapters()
 {
-    for (uintptr_t address : {0x470000u, 0x490000u, 0x620000u})
-        Check(VirtualAlloc(reinterpret_cast<void *>(address), 0x10000,
-                           MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE) != nullptr,
-              "isolated engine address reservation");
-    Jump(0x49c360, reinterpret_cast<uintptr_t>(&NativeUp));
-    Jump(0x49c280, reinterpret_cast<uintptr_t>(&NativeDown));
-    Jump(0x49c1a0, reinterpret_cast<uintptr_t>(&NativeLeft));
-    Jump(0x49c0c0, reinterpret_cast<uintptr_t>(&NativeRight));
-    FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void *>(0x400000), 0x300000);
+    void *allocation = VirtualAlloc(nullptr, 0x300000,
+        MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    Check(allocation != nullptr, "isolated engine allocation");
+    zoom_pan::offline_engine_base = reinterpret_cast<uintptr_t>(allocation);
+    using zoom_pan::EngineAddress;
+    test_camera_x = reinterpret_cast<int *>(EngineAddress(0x62848c));
+    test_camera_y = reinterpret_cast<int *>(EngineAddress(0x6284a8));
+    Jump(EngineAddress(0x49c360), reinterpret_cast<uintptr_t>(&NativeUp));
+    Jump(EngineAddress(0x49c280), reinterpret_cast<uintptr_t>(&NativeDown));
+    Jump(EngineAddress(0x49c1a0), reinterpret_cast<uintptr_t>(&NativeLeft));
+    Jump(EngineAddress(0x49c0c0), reinterpret_cast<uintptr_t>(&NativeRight));
+    FlushInstructionCache(GetCurrentProcess(), allocation, 0x300000);
     Check(resolution::Configure(1920, 1080), "resolution");
-    auto &x = *reinterpret_cast<int *>(0x62848c);
-    auto &y = *reinterpret_cast<int *>(0x6284a8);
+    auto &x = *test_camera_x;
+    auto &y = *test_camera_y;
     const uintptr_t wrappers[] = {
         reinterpret_cast<uintptr_t>(&zoom_pan::UpCall),
         reinterpret_cast<uintptr_t>(&zoom_pan::DownCall),
@@ -166,13 +175,13 @@ static void Adapters()
     x = y = 1000;
     Check(Invoke(wrappers[3], 1) == 0 && x == 1000, "subpixel redraw result");
     Check(Invoke(wrappers[3], 1) == 1 && x == 1001, "subpixel motion retained");
-    *reinterpret_cast<unsigned char *>(0x47f210) = 0xe8;
-    zoom_pan::WriteCall(0x47f210, 0x49c360);
-    Check(zoom_pan::BranchIs(0x47f210, 0xe8, 0x49c360), "branch preflight");
-    Check(!zoom_pan::BranchIs(0x47f210, 0xe8, 0x49c361) &&
-          !zoom_pan::BranchIs(0x47f210, 0xe9, 0x49c360), "unknown branch rejected");
-    for (uintptr_t address : {0x470000u, 0x490000u, 0x620000u})
-        VirtualFree(reinterpret_cast<void *>(address), 0, MEM_RELEASE);
+    const uintptr_t site = EngineAddress(0x47f210), target = EngineAddress(0x49c360);
+    *reinterpret_cast<unsigned char *>(site) = 0xe8;
+    zoom_pan::WriteCall(site, target);
+    Check(zoom_pan::BranchIs(site, 0xe8, target), "branch preflight");
+    Check(!zoom_pan::BranchIs(site, 0xe8, target + 1) &&
+          !zoom_pan::BranchIs(site, 0xe9, target), "unknown branch rejected");
+    VirtualFree(allocation, 0, MEM_RELEASE);
 }
 int main()
 {

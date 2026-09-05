@@ -62,9 +62,13 @@ Existing native world-zoom/input tests, 3,072,960 panning crop cases, fresh-fram
 sequences at seven resolutions, fixed-resolution geometry, zoom geometry, and
 2,240 HUD-sizing configurations pass. Runtime diagnostics remain disabled.
 
-The initial test helper reserved too broad a dummy engine address range in its
-own process and collided with an existing allocation. Reserving just the three
-required 64 KiB regions fixes the harness without changing production code.
+The initial test helper reserved fixed dummy engine addresses in its own
+process. Narrowing this to three 64 KiB regions passed locally but still collided
+with allocations on GitHub's runner. The harness now allocates a relocatable
+dummy engine region and uses a compile-time-only address mapper for its native
+stubs and camera data. Production builds retain the original constant addresses;
+the Release gate rejects test definitions. Register ABI and motion tests are
+unchanged, and no checks are skipped when low memory is occupied.
 
 CPU/GDI/OpenGL/D3D9 presentation regression tests and the system-map validator
 also pass. Local test renderer SHA256:

@@ -9,7 +9,7 @@ New-Item -ItemType Directory -Path $output -Force | Out-Null
 $source = Join-Path $PSScriptRoot 'verify_zoom_pan.cpp'
 $exe = Join-Path $output 'zoom_pan_tests.exe'
 $obj = Join-Path $output 'zoom_pan_tests.obj'
-& cmd /d /s /c "`"$vcvars`" >nul && cl /nologo /std:c++20 /EHsc /O2 /D_CRT_SECURE_NO_WARNINGS `"$source`" /Fe:`"$exe`" /Fo:`"$obj`" /link /BASE:0x50000000 user32.lib"
+& cmd /d /s /c "`"$vcvars`" >nul && cl /nologo /std:c++20 /EHsc /O2 /D_CRT_SECURE_NO_WARNINGS `"$source`" /Fe:`"$exe`" /Fo:`"$obj`" /link user32.lib"
 if ($LASTEXITCODE -ne 0) { throw 'Zoom pan test compile failed' }
 & $exe
 if ($LASTEXITCODE -ne 0) { throw 'Zoom pan regression test failed' }

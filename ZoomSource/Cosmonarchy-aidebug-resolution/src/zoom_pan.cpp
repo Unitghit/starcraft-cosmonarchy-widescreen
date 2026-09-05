@@ -13,8 +13,21 @@ namespace zoom_pan
         using MiddleScroll = void (__fastcall *)(int, int);
         MiddleScroll original_middle = nullptr;
 
-        int CameraX() { return *reinterpret_cast<volatile int *>(0x62848c); }
-        int CameraY() { return *reinterpret_cast<volatile int *>(0x6284a8); }
+#ifdef ZOOM_PAN_OFFLINE_TEST
+        // The isolated ABI test has no engine image at StarCraft's addresses.
+        // Remap its native stubs/data without requiring free low memory on CI.
+        uintptr_t offline_engine_base = 0;
+#endif
+        inline uintptr_t EngineAddress(uintptr_t address)
+        {
+#ifdef ZOOM_PAN_OFFLINE_TEST
+            return offline_engine_base + address - 0x400000;
+#else
+            return address;
+#endif
+        }
+        int CameraX() { return *reinterpret_cast<volatile int *>(EngineAddress(0x62848c)); }
+        int CameraY() { return *reinterpret_cast<volatile int *>(EngineAddress(0x6284a8)); }
 
         void Scale(Motion &motion, int &dx, int &dy, int camera_x, int camera_y)
         {
@@ -60,10 +73,10 @@ namespace zoom_pan
             return result;
         }
 
-        int __cdecl Up(int amount) { return Scroll(amount, 0, 0x49c360); }
-        int __cdecl Down(int amount) { return Scroll(amount, 1, 0x49c280); }
-        int __cdecl Left(int amount) { return Scroll(amount, 2, 0x49c1a0); }
-        int __cdecl Right(int amount) { return Scroll(amount, 3, 0x49c0c0); }
+        int __cdecl Up(int amount) { return Scroll(amount, 0, EngineAddress(0x49c360)); }
+        int __cdecl Down(int amount) { return Scroll(amount, 1, EngineAddress(0x49c280)); }
+        int __cdecl Left(int amount) { return Scroll(amount, 2, EngineAddress(0x49c1a0)); }
+        int __cdecl Right(int amount) { return Scroll(amount, 3, EngineAddress(0x49c0c0)); }
 
         __declspec(naked) void UpCall()
         {

@@ -19,6 +19,13 @@
   EXE SHA256: `5012D862397BE062538486E494D961DFDF43CAB2793A359C404FC4600BDCDDB0`.
 - The user approved committing, pushing, and publishing this verified v0.5.2
   bundle. No new Linux/macOS interactive coverage is claimed.
+- Before publication, GitHub exposed a low-address collision in the isolated
+  ABI test. Its dummy engine now relocates. Ten repeated local runs pass, and a
+  Release rebuild confirms the executable code is byte-identical to the tested
+  and packaged renderer (`4300390A715D9C8F9A18FC4490C98625C10D9D8355F4E5313506F4DA217B88E3`).
+  The prepared release files remain unchanged. The public standalone checksum
+  uses GitHub's normalized `Cosmonarchy.Widescreen.Settings.exe` asset name;
+  the ZIP retains the original executable filename and matching inner checksum.
 
 ## v0.5.1 verification, 2026-09-05
 
